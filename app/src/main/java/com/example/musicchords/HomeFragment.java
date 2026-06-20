@@ -66,6 +66,9 @@ public class HomeFragment extends Fragment {
     private UpcomingChordAdapter upcomingAdapter;
     private RecyclerView rvUpcomingChords;
     private Button exportchord;
+    private TextView tvDetectedKey;
+    private TextView tvCapoSuggestion;
+
 
     private long downloadID = -1;
     private boolean receiverRegistered = false;
@@ -174,6 +177,9 @@ public class HomeFragment extends Fragment {
         rvUpcomingChords.setLayoutManager(new LinearLayoutManager(getContext(), LinearLayoutManager.HORIZONTAL, false));
         upcomingAdapter = new UpcomingChordAdapter();
         rvUpcomingChords.setAdapter(upcomingAdapter);
+        tvDetectedKey     = view.findViewById(R.id.tv_detected_key);
+        tvCapoSuggestion  = view.findViewById(R.id.tv_capo_suggestion);
+
 
         // Initial state
         buttonDetectPitch.setEnabled(false);
@@ -404,6 +410,19 @@ public class HomeFragment extends Fragment {
                     buttonDownload.setVisibility(View.GONE);
                 }
             });
+        viewModel.getDetectedKeyText().observe(getViewLifecycleOwner(), keyText -> {
+            if (keyText != null && !keyText.isEmpty()) {
+                tvDetectedKey.setText(keyText);
+                tvDetectedKey.setVisibility(View.VISIBLE);
+            }
+        });
+        viewModel.getCapoSuggestionText().observe(getViewLifecycleOwner(), capo -> {
+            if (capo != null && !capo.isEmpty()) {
+                tvCapoSuggestion.setText(capo);
+                tvCapoSuggestion.setVisibility(View.VISIBLE);
+            }
+        });
+
         viewModel.getChordProgress().observe(getViewLifecycleOwner(), progress -> {
             progressBarChord.setProgress(progress);
             if (progress > 85) {

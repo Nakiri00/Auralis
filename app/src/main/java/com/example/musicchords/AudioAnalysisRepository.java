@@ -19,13 +19,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class AudioAnalysisRepository {
 
     private static final String TAG = "AudioAnalysisRepo";
 
     public interface AnalysisCallback {
-        void onComplete(List<ChordTimestamp> results);
+        void onComplete(List<ChordTimestamp> results, int keyIndex);
         void onError(Exception e);
     }
 
@@ -73,6 +74,7 @@ public class AudioAnalysisRepository {
                 final ArrayDeque<Double> timeWindow = new ArrayDeque<>();
                 final String[] lastSavedChord = {""};
                 final List<ChordTimestamp> detectedChords = new ArrayList<>();
+                final float[] globalChroma = new float[12];
                 final ArrayDeque<float[]> chromaTemporalWindow = new ArrayDeque<>();
                 final int CHROMA_SMOOTHING_FRAMES = 4;
 
@@ -205,6 +207,9 @@ public class AudioAnalysisRepository {
                             updateVoteWindow("-", timestamp, chordWindow, timeWindow, lastSavedChord, VOTE_WINDOW_SIZE, detectedChords);
                             return true;
                         }
+                        // G2. ACCUMULATE GLOBAL CHROMA for key detection
+                        for (int i = 0; i < 12; i++) globalChroma[i] += chroma[i];
+
 
                         // H. CHORD MATCHING
                         String currentChord = ChordTemplates.findBestMatchingChord(smoothChroma);
@@ -253,8 +258,18 @@ public class AudioAnalysisRepository {
 
                     @Override
                     public void processingFinished() {
-                        callback.onComplete(detectedChords);
+                        float maxGlobal = 0;
+                        for (float v : globalChroma) maxGlobal = Math.max(maxGlobal, v);
+                        if (maxGlobal > 0) {
+                            for (int i = 0; i < 12; i++) globalChroma[i] /= maxGlobal;
+                        }
+
+                        int keyIndex = KeyDetector.detectKey(globalChroma);
+                        List<ChordTimestamp> afterKeyFix   = applyKeyConsistency(detectedChords, globalChroma, keyIndex);
+                        List<ChordTimestamp> finalChords   = smoothTransitions(afterKeyFix);
+                        callback.onComplete(finalChords, keyIndex);
                     }
+
                 };
 
                 dispatcher.addAudioProcessor(chordProcessor);
@@ -266,6 +281,93 @@ public class AudioAnalysisRepository {
             }
         }).start();
     }
+
+    /**
+     * Post-processes detected chords for musical key consistency.
+     *
+     * Rules per chord type:
+     *  - Power chord (C5)   : key-neutral (no 3rd) → keep as-is always
+     *  - Sus chord (sus2/4) : tonally ambiguous → keep as-is always
+     *  - Dominant 7th (C7)  : if not diatonic, try stripping to root Major triad
+     *  - Minor 7th (Cm7)    : if not diatonic, try stripping to root Minor triad
+     *  - Major/Minor triad  : if not diatonic, try opposite quality
+     */
+    private List<ChordTimestamp> applyKeyConsistency(
+            List<ChordTimestamp> rawChords, float[] globalChroma, int keyIndex) {
+
+        if (rawChords.isEmpty()) return rawChords;
+
+        // Gunakan keyIndex yang sudah dihitung — tidak perlu detectKey() lagi
+        Set<String> diatonic = KeyDetector.getDiatonicChords(keyIndex);
+        Log.d(TAG, "Detected key: " + KeyDetector.getKeyName(keyIndex));
+        Log.d(TAG, "Diatonic chords: " + diatonic);
+
+        List<ChordTimestamp> result = new ArrayList<>();
+        for (ChordTimestamp ct : rawChords) {
+            String chord = ct.getChordName();
+
+            if (chord.equals("-") || diatonic.contains(chord)) {
+                result.add(ct);
+                continue;
+            }
+
+            String corrected = chord;
+
+            if (chord.endsWith("5") || chord.endsWith("sus2") || chord.endsWith("sus4")) {
+                corrected = chord;
+            } else if (chord.endsWith("m7")) {
+                String rootName = chord.substring(0, chord.length() - 2);
+                String candidate = rootName + " Minor";
+                if (diatonic.contains(candidate)) corrected = candidate;
+                if (corrected.equals(chord)) {
+                    candidate = rootName + " Major";
+                    if (diatonic.contains(candidate)) corrected = candidate;
+                }
+            } else if (chord.endsWith("7")) {
+                String rootName = chord.substring(0, chord.length() - 1);
+                String candidate = rootName + " Major";
+                if (diatonic.contains(candidate)) corrected = candidate;
+                if (corrected.equals(chord)) {
+                    candidate = rootName + " Minor";
+                    if (diatonic.contains(candidate)) corrected = candidate;
+                }
+            } else if (chord.endsWith(" Major")) {
+                String candidate = chord.replace(" Major", " Minor");
+                if (diatonic.contains(candidate)) corrected = candidate;
+            } else if (chord.endsWith(" Minor")) {
+                String candidate = chord.replace(" Minor", " Major");
+                if (diatonic.contains(candidate)) corrected = candidate;
+            }
+
+            if (!corrected.equals(chord)) {
+                Log.d(TAG, "Key correction: " + chord + " -> " + corrected);
+            }
+            result.add(new ChordTimestamp(ct.getTimeSeconds(), corrected));
+        }
+        return result;
+    }
+
+
+    // Tambahkan di AudioAnalysisRepository setelah applyKeyConsistency()
+    private List<ChordTimestamp> smoothTransitions(List<ChordTimestamp> chords) {
+        if (chords.size() < 3) return chords;
+
+        List<ChordTimestamp> result = new ArrayList<>(chords);
+        // Hapus "isolated chord" — muncul 1x di antara 2 chord yang sama
+        // Contoh: C, C, G, C, C → kemungkinan G adalah noise → C, C, C, C, C
+        for (int i = 1; i < result.size() - 1; i++) {
+            String prev = result.get(i - 1).getChordName();
+            String curr = result.get(i).getChordName();
+            String next = result.get(i + 1).getChordName();
+            if (prev.equals(next) && !curr.equals(prev) && !curr.equals("-")) {
+                Log.d(TAG, "Transition smooth: " + curr + " → " + prev + " (isolated)");
+                result.set(i, new ChordTimestamp(result.get(i).getTimeSeconds(), prev));
+            }
+        }
+        return result;
+    }
+
+
 
     public void analyze(String audioPath, boolean isPremiumMode, AnalysisCallback callback) {
         // 1. Ekstrak audio menjadi PCM (berlaku untuk kedua mode)

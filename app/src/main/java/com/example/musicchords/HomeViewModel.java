@@ -77,6 +77,8 @@ public class HomeViewModel extends AndroidViewModel {
         new MutableLiveData<>(0);
     private final MutableLiveData<String> currentChordDisplay =
         new MutableLiveData<>("-");
+    private final MutableLiveData<String> detectedKeyText    = new MutableLiveData<>("");
+    private final MutableLiveData<String> capoSuggestionText = new MutableLiveData<>("");
 
     // LiveData — File state
     private final MutableLiveData<Boolean> fileLoaded = new MutableLiveData<>(
@@ -168,10 +170,12 @@ public class HomeViewModel extends AndroidViewModel {
         return audioFilePath;
     }
 
-    // Getter untuk diobservasi atau diambil datanya
     public LiveData<List<ChordTimestamp>> getDetectedChords() {
         return detectedChordsList;
     }
+    public LiveData<String> getDetectedKeyText()    { return detectedKeyText; }
+    public LiveData<String> getCapoSuggestionText() { return capoSuggestionText; }
+
 
     private List<ChordTimestamp> postProcess(List<ChordTimestamp> raw) {
         if (raw == null || raw.size() < 2) return raw;
@@ -578,9 +582,10 @@ public class HomeViewModel extends AndroidViewModel {
         isAnalyzing.setValue(true);
 
         // Update UI untuk memberitahu user bahwa AI sedang bekerja
-        currentChordDisplay.setValue("Memisahkan vokal & drum (AI)...");
-        statusText.setValue("Sedang membersihkan audio via Server...");
-
+//        currentChordDisplay.setValue("Memisahkan vokal & instrumen...");
+//        statusText.setValue("Sedang membersihkan audio via Server...");
+        currentChordDisplay.setValue("Menganalisis Chords...");
+        statusText.setValue("Menganalisis...");
         detectedChords.clear();
         setDetectedChords(new ArrayList<>());
 
@@ -593,7 +598,8 @@ public class HomeViewModel extends AndroidViewModel {
             public void onSuccess(String separatedAudioPath) {
                 handler.post(() -> {
                     currentChordDisplay.setValue("Menganalisis Chords...");
-                    statusText.setValue("Selesai. Menganalisis...");
+//                    statusText.setValue("Selesai. Menganalisis...");
+                    statusText.setValue("Menganalisis...");
                 });
 
                 executeDspAnalysis(separatedAudioPath, title, audioPath);
@@ -601,12 +607,12 @@ public class HomeViewModel extends AndroidViewModel {
 
             @Override
             public void onError(Exception e) {
-                Log.e(TAG, "Server Gagal, menggunakan file asli", e);
-                handler.post(() -> {
-                    toastMessage.setValue("Server AI terputus, memakai audio asli.");
+//                Log.e(TAG, "Server Gagal, menggunakan file asli", e);
+//                handler.post(() -> {
+//                  toastMessage.setValue("Server terputus, memakai audio asli.");
                     currentChordDisplay.setValue("Menganalisis Chords...");
-                    statusText.setValue("Menganalisis (Mode Offline)...");
-                });
+                    statusText.setValue("Menganalisis...");
+//                });
 
                 executeDspAnalysis(audioPath, title, audioPath);
             }
@@ -614,74 +620,57 @@ public class HomeViewModel extends AndroidViewModel {
     }
 
     private void executeDspAnalysis(String fileToAnalyze, String title, String originalAudioPath) {
-        analysisRepository.analyzeChords(
-                fileToAnalyze,
-                new AudioAnalysisRepository.AnalysisCallback() {
-                    @Override
-                    public void onComplete(List<ChordTimestamp> results) {
-                        StringBuilder sb = new StringBuilder();
-                        sb.append(title != null ? title : "Audio").append("\n");
-                        for (ChordTimestamp item : results) {
-                            sb.append(
-                                    String.format(
-                                            java.util.Locale.US,
-                                            "[%02d:%02d] %s\n",
-                                            (int) (item.getTimeSeconds() / 60),
-                                            (int) (item.getTimeSeconds() % 60),
-                                            item.getChordName()
-                                    )
-                            );
-                        }
-                        String fullResult = sb.toString();
+        analysisRepository.analyzeChords(audioPath, new AudioAnalysisRepository.AnalysisCallback() {
+            @Override
+            public void onComplete(List<ChordTimestamp> results, int keyIndex) {  // ← terima keyIndex
+                detectedChords.clear();
+                detectedChords.addAll(results);
 
-                        handler.post(() -> {
-                            List<ChordTimestamp> postProcessed = postProcess(results);
-                            detectedChords.clear();
-                            detectedChords.addAll(postProcessed);
-                            setDetectedChords(postProcessed);
-
-                            isAnalyzing.setValue(false);
-                            currentChordDisplay.setValue(
-                                    results.isEmpty()
-                                            ? "Tidak ada chord terdeteksi."
-                                            : "Analisis Selesai"
-                            );
-                            statusText.setValue("Analisis selesai.");
-
-                            // Simpan history menggunakan path audio asli (agar saat di-play, suaranya tetap normal pakai drum/vokal)
-                            historyRepository.saveOrUpdateHistory(
-                                    title,
-                                    originalAudioPath,
-                                    fullResult,
-                                    new HistoryRepository.OnSaveListener() {
-                                        @Override
-                                        public void onSuccess(boolean isUpdate) {
-                                            Log.d(TAG, "History saved, isUpdate=" + isUpdate);
-                                        }
-
-                                        @Override
-                                        public void onError(Exception e) {
-                                            Log.e(TAG, "Failed to save history", e);
-                                        }
-                                    }
-                            );
-                        });
-                    }
-
-                    @Override
-                    public void onError(Exception e) {
-                        Log.e(TAG, "Analysis error", e);
-                        handler.post(() -> {
-                            isAnalyzing.setValue(false);
-                            toastMessage.setValue(
-                                    "Gagal menganalisis audio: " + e.getMessage()
-                            );
-                            currentChordDisplay.setValue("-");
-                            statusText.setValue("Analisis gagal.");
-                        });
-                    }
+                // Bangun teks hasil analisis
+                StringBuilder sb = new StringBuilder();
+                sb.append(title != null ? title : "Audio").append("\n");
+                for (ChordTimestamp item : results) {
+                    String name = item.getChordName();
+                    String roman = name.equals("-")
+                            ? ""
+                            : "  (" + KeyDetector.toRomanNumeral(keyIndex, name) + ")";
+                    sb.append(String.format(java.util.Locale.US, "[%02d:%02d] %s%s\n",
+                            (int)(item.getTimeSeconds() / 60),
+                            (int)(item.getTimeSeconds() % 60),
+                            name,
+                            roman));
                 }
-        );
+
+                // Hasilkan info key dan capo dari keyIndex
+                String keyName    = KeyDetector.getKeyName(keyIndex);
+                String capoAdvice = CapoSuggester.suggest(keyIndex);
+
+                handler.post(() -> {
+                    isAnalyzing.setValue(false);
+                    currentChordDisplay.setValue(results.isEmpty() ? "Tidak ada chord terdeteksi." : "Analisis Selesai");
+                    statusText.setValue("Analisis selesai.");
+                    detectedKeyText.setValue("Key: " + keyName);           // ← tampilkan key
+                    capoSuggestionText.setValue(capoAdvice);               // ← tampilkan saran capo
+
+                    historyRepository.saveOrUpdateHistory(title, audioPath, sb.toString(),
+                            new HistoryRepository.OnSaveListener() {
+                                @Override public void onSuccess(boolean isUpdate) { Log.d(TAG, "History saved"); }
+                                @Override public void onError(Exception e)        { Log.e(TAG, "Failed to save history", e); }
+                            });
+                });
+            }
+
+            @Override
+            public void onError(Exception e) {
+                Log.e(TAG, "Analysis error", e);
+                handler.post(() -> {
+                    isAnalyzing.setValue(false);
+                    toastMessage.setValue("Gagal menganalisis audio: " + e.getMessage());
+                    currentChordDisplay.setValue("-");
+                });
+            }
+        });
+
     }
 
     // ─── Load History ───────────────────────────────────────────────────────
