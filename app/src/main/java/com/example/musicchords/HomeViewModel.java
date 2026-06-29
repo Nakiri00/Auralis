@@ -577,19 +577,15 @@ public class HomeViewModel extends AndroidViewModel {
     }
 
     // ─── Audio Analysis ─────────────────────────────────────────────────────
-    public void analyzeChords(String audioPath, String title) {
+    public void analyzeChords(String audioPath, String title, boolean isPremiumUser) {
         if (Boolean.TRUE.equals(isAnalyzing.getValue())) return;
         isAnalyzing.setValue(true);
 
-        // Update UI untuk memberitahu user bahwa AI sedang bekerja
-//        currentChordDisplay.setValue("Memisahkan vokal & instrumen...");
-//        statusText.setValue("Sedang membersihkan audio via Server...");
-        currentChordDisplay.setValue("Menganalisis Chords...");
-        statusText.setValue("Menganalisis...");
+        currentChordDisplay.setValue("Memisahkan Vokal...");
+        statusText.setValue("Membersihkan audio via Server (Spleeter)...");
         detectedChords.clear();
         setDetectedChords(new ArrayList<>());
 
-        // Ambil context dari AndroidViewModel
         Context context = getApplication().getApplicationContext();
         SourceSeparationHelper separatorHelper = new SourceSeparationHelper();
 
@@ -597,34 +593,38 @@ public class HomeViewModel extends AndroidViewModel {
             @Override
             public void onSuccess(String separatedAudioPath) {
                 handler.post(() -> {
+                    // Update UI berdasarkan mode yang dipilih
+                    String mode = isPremiumUser ? "Librosa" : "TarsosDSP";
+                    statusText.setValue("Menganalisis dengan " + mode + "...");
                     currentChordDisplay.setValue("Menganalisis Chords...");
-//                    statusText.setValue("Selesai. Menganalisis...");
-                    statusText.setValue("Menganalisis...");
                 });
 
-                executeDspAnalysis(separatedAudioPath, title, audioPath);
+                executeAnalysis(separatedAudioPath, title, audioPath, isPremiumUser);
             }
 
             @Override
             public void onError(Exception e) {
-//                Log.e(TAG, "Server Gagal, menggunakan file asli", e);
-//                handler.post(() -> {
-//                  toastMessage.setValue("Server terputus, memakai audio asli.");
+                Log.e("SeparatorDebug", "Server Spleeter Gagal, menggunakan file asli", e);
+                handler.post(() -> {
+                    toastMessage.setValue("Server pemisah vokal terputus, memakai audio asli.");
+                    String mode = isPremiumUser ? "Librosa" : "TarsosDSP";
+                    statusText.setValue("Menganalisis dengan " + mode + "...");
                     currentChordDisplay.setValue("Menganalisis Chords...");
-                    statusText.setValue("Menganalisis...");
-//                });
+                });
 
-                executeDspAnalysis(audioPath, title, audioPath);
+                // Fallback: Jika server mati, tetap lanjut analisis tapi pakai audio mentah (audioPath)
+                executeAnalysis(audioPath, title, audioPath, isPremiumUser);
             }
         });
     }
 
-    private void executeDspAnalysis(String fileToAnalyze, String title, String originalAudioPath) {
-        analysisRepository.analyzeChords(audioPath, new AudioAnalysisRepository.AnalysisCallback() {
+    private void executeAnalysis(String fileToAnalyze, String title, String originalAudioPath, boolean isPremiumUser) {
+        analysisRepository.analyze(fileToAnalyze, isPremiumUser, new AudioAnalysisRepository.AnalysisCallback() {
             @Override
             public void onComplete(List<ChordTimestamp> results, int keyIndex) {  // ← terima keyIndex
                 detectedChords.clear();
                 detectedChords.addAll(results);
+                setDetectedChords(new ArrayList<>(detectedChords));
 
                 // Bangun teks hasil analisis
                 StringBuilder sb = new StringBuilder();
@@ -649,10 +649,10 @@ public class HomeViewModel extends AndroidViewModel {
                     isAnalyzing.setValue(false);
                     currentChordDisplay.setValue(results.isEmpty() ? "Tidak ada chord terdeteksi." : "Analisis Selesai");
                     statusText.setValue("Analisis selesai.");
-                    detectedKeyText.setValue("Key: " + keyName);           // ← tampilkan key
-                    capoSuggestionText.setValue(capoAdvice);               // ← tampilkan saran capo
+                    detectedKeyText.setValue("Key: " + keyName);
+                    capoSuggestionText.setValue(capoAdvice);              
 
-                    historyRepository.saveOrUpdateHistory(title, audioPath, sb.toString(),
+                    historyRepository.saveOrUpdateHistory(title, fileToAnalyze, sb.toString(),
                             new HistoryRepository.OnSaveListener() {
                                 @Override public void onSuccess(boolean isUpdate) { Log.d(TAG, "History saved"); }
                                 @Override public void onError(Exception e)        { Log.e(TAG, "Failed to save history", e); }

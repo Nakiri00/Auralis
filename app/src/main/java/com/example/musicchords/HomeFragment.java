@@ -239,13 +239,30 @@ public class HomeFragment extends Fragment {
         buttonDetectPitch.setOnClickListener(v -> {
             String path = viewModel.getAudioFilePath();
             if (path != null && !path.isEmpty()) {
-                viewModel.analyzeChords(path, viewModel.getAudioTitle());
+                String[] options = {
+                        "Mode Standar (TarsosDSP)",
+                        "Mode Premium (Librosa)"
+                };
+
+                new android.app.AlertDialog.Builder(getContext())
+                        .setTitle("Pilih Mode Deteksi Chord")
+                        .setItems(options, (dialog, which) -> {
+                            boolean isPremium = (which == 1);
+
+                            if (isPremium) {
+                                // TODO: Cek apakah user sudah bayar/berlangganan
+                                // Jika belum berlangganan:
+                                // Toast.makeText(getContext(), "Silakan upgrade ke Premium untuk akses AI!", Toast.LENGTH_SHORT).show();
+                                // return;
+                            }
+
+                            // Jika gratis atau sudah bayar premium, jalankan analisis
+                            viewModel.analyzeChords(path, viewModel.getAudioTitle(), isPremium);
+                        })
+                        .show();
+
             } else {
-                Toast.makeText(
-                    getContext(),
-                    "Pilih atau unduh file audio terlebih dahulu.",
-                    Toast.LENGTH_SHORT
-                ).show();
+                Toast.makeText(getContext(), "Pilih atau unduh file audio terlebih dahulu.", Toast.LENGTH_SHORT).show();
             }
         });
 

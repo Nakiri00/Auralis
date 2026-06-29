@@ -22,7 +22,7 @@ public class SourceSeparationHelper {
     private static final String TAG = "SourceSeparation";
     // Ganti dengan IP laptop Anda saat menjalankan FastAPI (misal: 192.168.1.5)
     // Jika menggunakan ngrok, masukkan URL ngrok-nya di sini
-    private static final String NGROK_URL = BuildConfig.NGROK_URL;
+    private static final String NGROK_URL = BuildConfig.NGROK_URL +"/separate";
 
     public interface SeparationCallback {
         void onSuccess(String separatedAudioPath);
