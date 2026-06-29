@@ -144,6 +144,26 @@
                     android:layout_marginBottom="16dp" />
 
                 <TextView
+                    android:id="@+id/tv_detected_key"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:visibility="gone"
+                    android:drawablePadding="6dp"
+                    android:padding="8dp" />
+
+                <TextView
+                    android:id="@+id/tv_capo_suggestion"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="14sp"
+                    android:visibility="gone"
+                    android:padding="8dp" />
+
+                <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/text_up_next"

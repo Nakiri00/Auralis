@@ -66,6 +66,9 @@ public class HomeFragment extends Fragment {
     private UpcomingChordAdapter upcomingAdapter;
     private RecyclerView rvUpcomingChords;
     private Button exportchord;
+    private TextView tvDetectedKey;
+    private TextView tvCapoSuggestion;
+
 
     private long downloadID = -1;
     private boolean receiverRegistered = false;
@@ -174,6 +177,9 @@ public class HomeFragment extends Fragment {
         rvUpcomingChords.setLayoutManager(new LinearLayoutManager(getContext(), LinearLayoutManager.HORIZONTAL, false));
         upcomingAdapter = new UpcomingChordAdapter();
         rvUpcomingChords.setAdapter(upcomingAdapter);
+        tvDetectedKey     = view.findViewById(R.id.tv_detected_key);
+        tvCapoSuggestion  = view.findViewById(R.id.tv_capo_suggestion);
+
 
         // Initial state
         buttonDetectPitch.setEnabled(false);
@@ -233,13 +239,30 @@ public class HomeFragment extends Fragment {
         buttonDetectPitch.setOnClickListener(v -> {
             String path = viewModel.getAudioFilePath();
             if (path != null && !path.isEmpty()) {
-                viewModel.analyzeChords(path, viewModel.getAudioTitle());
+                String[] options = {
+                        "Mode Standar (TarsosDSP)",
+                        "Mode Premium (Librosa)"
+                };
+
+                new android.app.AlertDialog.Builder(getContext())
+                        .setTitle("Pilih Mode Deteksi Chord")
+                        .setItems(options, (dialog, which) -> {
+                            boolean isPremium = (which == 1);
+
+                            if (isPremium) {
+                                // TODO: Cek apakah user sudah bayar/berlangganan
+                                // Jika belum berlangganan:
+                                // Toast.makeText(getContext(), "Silakan upgrade ke Premium untuk akses AI!", Toast.LENGTH_SHORT).show();
+                                // return;
+                            }
+
+                            // Jika gratis atau sudah bayar premium, jalankan analisis
+                            viewModel.analyzeChords(path, viewModel.getAudioTitle(), isPremium);
+                        })
+                        .show();
+
             } else {
-                Toast.makeText(
-                    getContext(),
-                    "Pilih atau unduh file audio terlebih dahulu.",
-                    Toast.LENGTH_SHORT
-                ).show();
+                Toast.makeText(getContext(), "Pilih atau unduh file audio terlebih dahulu.", Toast.LENGTH_SHORT).show();
             }
         });
 
@@ -404,6 +427,19 @@ public class HomeFragment extends Fragment {
                     buttonDownload.setVisibility(View.GONE);
                 }
             });
+        viewModel.getDetectedKeyText().observe(getViewLifecycleOwner(), keyText -> {
+            if (keyText != null && !keyText.isEmpty()) {
+                tvDetectedKey.setText(keyText);
+                tvDetectedKey.setVisibility(View.VISIBLE);
+            }
+        });
+        viewModel.getCapoSuggestionText().observe(getViewLifecycleOwner(), capo -> {
+            if (capo != null && !capo.isEmpty()) {
+                tvCapoSuggestion.setText(capo);
+                tvCapoSuggestion.setVisibility(View.VISIBLE);
+            }
+        });
+
         viewModel.getChordProgress().observe(getViewLifecycleOwner(), progress -> {
             progressBarChord.setProgress(progress);
             if (progress > 85) {

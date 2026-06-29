@@ -104,26 +104,57 @@ public class MidiExportHelper {
     }
 
     // Method pemetaan Chord String -> MIDI Notes (C4 = 60)
-    private static int[] getMidiNotesForChord(String chord) {
-        String rootStr = chord.split(" ")[0]
+    private static int[] getMidiNotesForChord(String chordName) {
+        // Normalisasi enharmonic (Ab→G#, Eb→D#, dll)
+        String normalized = chordName
                 .replace("Ab", "G#").replace("Eb", "D#")
                 .replace("Bb", "A#").replace("Db", "C#").replace("Gb", "F#");
-        boolean isMinor = chord.contains("Minor");
 
-        String[] notes = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-        int rootMidi = 60; // Mulai dari C4 (Oktav tengah)
+        String[] allNotes = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 
-        for (int i = 0; i < notes.length; i++) {
-            if (notes[i].equals(rootStr)) {
-                rootMidi = 60 + i;
-                break;
+        // Tentukan root (bisa 1 atau 2 karakter: C, C#, G#, dll)
+        String rootStr = "";
+        int rootMidi = 60;
+        for (String note : allNotes) {
+            if (normalized.startsWith(note)) {
+                if (note.length() > rootStr.length()) rootStr = note; // ambil yang lebih spesifik (C# > C)
             }
         }
+        for (int i = 0; i < allNotes.length; i++) {
+            if (allNotes[i].equals(rootStr)) { rootMidi = 60 + i; break; }
+        }
 
-        // Rumus Semitone: Major = +4, Minor = +3. Perfect 5th selalu +7
-        int thirdMidi = rootMidi + (isMinor ? 3 : 4);
-        int fifthMidi = rootMidi + 7;
+        // Tentukan kualitas chord dari suffix setelah root
+        String suffix = normalized.substring(rootStr.length());
 
-        return new int[]{rootMidi, thirdMidi, fifthMidi};
+        if (suffix.equals("5")) {
+            // Power chord: Root + 5th only
+            return new int[]{rootMidi, rootMidi + 7};
+
+        } else if (suffix.equals("7")) {
+            // Dominant 7th: Root + Major 3rd + 5th + Minor 7th
+            return new int[]{rootMidi, rootMidi + 4, rootMidi + 7, rootMidi + 10};
+
+        } else if (suffix.equals("m7")) {
+            // Minor 7th: Root + Minor 3rd + 5th + Minor 7th
+            return new int[]{rootMidi, rootMidi + 3, rootMidi + 7, rootMidi + 10};
+
+        } else if (suffix.equals("sus4")) {
+            // Sus4: Root + Perfect 4th + 5th
+            return new int[]{rootMidi, rootMidi + 5, rootMidi + 7};
+
+        } else if (suffix.equals("sus2")) {
+            // Sus2: Root + Major 2nd + 5th
+            return new int[]{rootMidi, rootMidi + 2, rootMidi + 7};
+
+        } else if (suffix.equals(" Minor")) {
+            // Minor triad
+            return new int[]{rootMidi, rootMidi + 3, rootMidi + 7};
+
+        } else {
+            // Default: Major triad (termasuk " Major" dan kasus tidak dikenal)
+            return new int[]{rootMidi, rootMidi + 4, rootMidi + 7};
+        }
     }
+
 }
