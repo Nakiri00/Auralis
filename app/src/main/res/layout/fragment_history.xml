@@ -64,8 +64,6 @@
             android:layout_marginStart="8dp"
             android:text="Newest"
             android:checked="true"
-               android:textColor="?attr/colorOnBackground"
-               app:tint="?attr/colorOnBackground"
         />
 
            <!-- Sort by song title (A-Z / Z-A) -->
@@ -77,8 +75,6 @@
             android:layout_marginStart="8dp"
             android:text="Title A-Z"
             android:checked="false"
-               android:textColor="?attr/colorOnBackground"
-               app:tint="?attr/colorOnBackground"
         />
 
        </LinearLayout>

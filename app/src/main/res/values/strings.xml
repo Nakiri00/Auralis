@@ -1,5 +1,8 @@
 <resources>
     <string name="app_name">Music Chords</string>
+    <string name="menu_home">Beranda</string>
+    <string name="menu_library">Pustaka</string>
+    <string name="menu_history">Riwayat</string>
 
     <string name="title_music_chords">Music Chords</string>
     <string name="hint_youtube_url">Masukan URL YouTube</string>

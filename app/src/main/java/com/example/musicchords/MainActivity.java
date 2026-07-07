@@ -21,10 +21,10 @@ public class MainActivity extends AppCompatActivity {
     private ActivityMainBinding binding;
     private MainViewModel viewModel;
 
-    private final Fragment homeFragment = new HomeFragment();
-    private final Fragment historyFragment = new HistoryFragment();
-    private final Fragment libraryFragment = new LibraryFragment();
-    private Fragment activeFragment = homeFragment;
+    private Fragment homeFragment;
+    private Fragment historyFragment;
+    private Fragment libraryFragment;
+    private Fragment activeFragment;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,7 +36,6 @@ public class MainActivity extends AppCompatActivity {
 
         viewModel = new ViewModelProvider(this).get(MainViewModel.class);
 
-        // Nonaktifkan nav sampai auth & fragment siap
         binding.navMenu.setEnabled(false);
 
         ViewCompat.setOnApplyWindowInsetsListener(
@@ -66,7 +65,6 @@ public class MainActivity extends AppCompatActivity {
                         ).show();
                         break;
                     case LOADING:
-                        // Tampilkan loading indicator jika perlu
                         break;
                 }
             });
@@ -76,21 +74,34 @@ public class MainActivity extends AppCompatActivity {
 
     private void setupFragments() {
         var fm = getSupportFragmentManager();
-        var ft = fm.beginTransaction();
-        if (!historyFragment.isAdded()) ft
-            .add(R.id.main_frame, historyFragment, "HISTORY")
-            .hide(historyFragment);
-        if (!homeFragment.isAdded()) ft.add(
-            R.id.main_frame,
-            homeFragment,
-            "HOME"
-        );
-        if (!libraryFragment.isAdded()) ft
-            .add(R.id.main_frame, libraryFragment, "LIBRARY")
-            .hide(libraryFragment);
-        ft.commit();
-        activeFragment = homeFragment;
 
+        homeFragment = fm.findFragmentByTag("HOME");
+        historyFragment = fm.findFragmentByTag("HISTORY");
+        libraryFragment = fm.findFragmentByTag("LIBRARY");
+
+        if (homeFragment == null) {
+            homeFragment = new HomeFragment();
+            historyFragment = new HistoryFragment();
+            libraryFragment = new LibraryFragment();
+
+            fm.beginTransaction()
+                    .add(R.id.main_frame, homeFragment, "HOME")
+                    .add(R.id.main_frame, historyFragment, "HISTORY").hide(historyFragment)
+                    .add(R.id.main_frame, libraryFragment, "LIBRARY").hide(libraryFragment)
+                    .commit();
+
+            activeFragment = homeFragment;
+        } else {
+            if (!libraryFragment.isHidden()) {
+                activeFragment = libraryFragment;
+            } else if (!historyFragment.isHidden()) {
+                activeFragment = historyFragment;
+            } else {
+                activeFragment = homeFragment;
+            }
+        }
+
+        // Jalankan listener navigasi
         binding.navMenu.setEnabled(true);
         binding.navMenu.setOnItemSelectedListener(item -> {
             int id = item.getItemId();
@@ -173,7 +184,6 @@ public class MainActivity extends AppCompatActivity {
         updateActivityTexts();
         updateActiveFragmentTexts();
 
-        // TAMBAHKAN BARIS INI: Paksa Toolbar menggambar ulang menu dengan bahasa baru
         invalidateOptionsMenu();
     }
 
@@ -185,9 +195,9 @@ public class MainActivity extends AppCompatActivity {
 
         // Update Bottom Navigation Titles (Pastikan Anda sudah punya string di strings.xml untuk menu_home, menu_library, menu_history)
         // Jika tidak, Anda bisa melewati update Bottom Nav ini atau membuatnya jika perlu.
-        // binding.navMenu.getMenu().findItem(R.id.home).setTitle(getString(R.string.menu_home));
-        // binding.navMenu.getMenu().findItem(R.id.library).setTitle(getString(R.string.menu_library));
-        // binding.navMenu.getMenu().findItem(R.id.history).setTitle(getString(R.string.menu_history));
+         binding.navMenu.getMenu().findItem(R.id.home).setTitle(getString(R.string.menu_home));
+         binding.navMenu.getMenu().findItem(R.id.library).setTitle(getString(R.string.menu_library));
+         binding.navMenu.getMenu().findItem(R.id.history).setTitle(getString(R.string.menu_history));
     }
 
     private void updateActiveFragmentTexts() {

@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.util.AttributeSet;
+import android.util.TypedValue;
 import android.view.View;
 
 public class ChordView extends View {
@@ -12,24 +13,30 @@ public class ChordView extends View {
     private String[] frets = new String[6];
     private int maxFret = 4;
     private int startingFret = 1;
+    private int themeColor;
 
     public ChordView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        init();
+        init(context);
     }
 
-    private void init() {
+    private void init(Context context) {
+        TypedValue typedValue = new TypedValue();
+        context.getTheme().resolveAttribute(com.google.android.material.R.attr.colorOnBackground, typedValue, true);
+        themeColor = typedValue.data;
+
         linePaint = new Paint();
-        linePaint.setColor(Color.BLACK);
+        linePaint.setColor(themeColor); // Gunakan warna tema, bukan Color.BLACK
         linePaint.setAntiAlias(true);
 
         dotPaint = new Paint();
-        dotPaint.setColor(Color.BLACK);
+        dotPaint.setColor(themeColor); // Gunakan warna tema
         dotPaint.setStyle(Paint.Style.FILL);
         dotPaint.setAntiAlias(true);
 
         textPaint = new Paint();
-        textPaint.setColor(Color.DKGRAY);
+        // Anda bisa menggunakan themeColor, atau memberikan sedikit transparansi jika ingin DKGRAY di light mode
+        textPaint.setColor(themeColor);
         textPaint.setTextSize(30f);
         textPaint.setTextAlign(Paint.Align.CENTER);
         textPaint.setAntiAlias(true);
