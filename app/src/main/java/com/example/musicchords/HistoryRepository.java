@@ -112,8 +112,7 @@ public class HistoryRepository {
             if (!task.getResult().isEmpty()) {
                 DocumentSnapshot doc = task.getResult().getDocuments().get(0);
                 historyRef.document(doc.getId())
-                        .update("timestamp", new Timestamp(new Date()),
-                                "result", resultText, "filePath", path)
+                        .update("timestamp", new Timestamp(new Date()), "result", resultText, "filePath", path)
                         .addOnSuccessListener(aVoid -> { if (listener != null) listener.onSuccess(true); })
                         .addOnFailureListener(e -> { if (listener != null) listener.onError(e); });
             } else {

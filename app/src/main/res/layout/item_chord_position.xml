@@ -17,8 +17,9 @@
         android:text="Posisi 1"
         android:textSize="12sp"
         android:textStyle="bold"
-        android:textColor="?attr/colorPrimary"
+        android:textColor="?attr/colorOnBackground"
         android:layout_marginBottom="6dp"
+
     />
 
     <!-- Diagram fretboard -->
@@ -35,9 +36,10 @@
         android:layout_height="wrap_content"
         android:text="X 3 2 0 1 0"
         android:textSize="11sp"
-        android:textColor="?attr/colorOnSurfaceVariant"
+        android:textColor="?attr/colorOnBackground"
         android:fontFamily="monospace"
         android:layout_marginTop="6dp"
+
     />
 
 </LinearLayout>

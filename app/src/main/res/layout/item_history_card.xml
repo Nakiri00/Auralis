@@ -20,6 +20,7 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:padding="16dp"
+
     >
 
         <!-- Title row with delete button on the right -->
@@ -38,9 +39,10 @@
                 android:text="Judul Lagu"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="@color/text_primary"
+                android:textColor="?attr/colorOnBackground"
                 android:maxLines="1"
                 android:ellipsize="end"
+
             />
 
             <ImageButton
@@ -96,6 +98,7 @@
                 android:textSize="12sp"
                 android:textColor="@android:color/holo_blue_dark"
                 android:textStyle="italic"
+
             />
 
         </LinearLayout>

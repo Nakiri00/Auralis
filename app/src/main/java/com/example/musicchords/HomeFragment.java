@@ -295,7 +295,6 @@ public class HomeFragment extends Fragment {
             List<ChordTimestamp> currentChords = viewModel.getDetectedChords().getValue();
 
             if (currentChords != null && !currentChords.isEmpty()) {
-                // Tambahkan opsi MIDI di sini
                 String[] options = {"Export sebagai PDF", "Export sebagai TXT", "Export sebagai MIDI"};
 
                 new android.app.AlertDialog.Builder(getContext())

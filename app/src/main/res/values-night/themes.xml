@@ -3,7 +3,10 @@
     <color name="text_primary">#FFFFFF</color>
     <color name="text_secondary">#BDBDBD</color>
     <style name="Base.Theme.MusicChords" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+        <item name="android:windowBackground">@color/black</item>
+        <item name="colorSurface">@color/black</item>
+        <item name="colorOnBackground">@color/white</item>
+        <item name="colorOnSurface">@color/white</item>
+        <item name="android:textColorPrimary">@color/white</item>
     </style>
 </resources>

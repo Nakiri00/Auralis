@@ -37,7 +37,7 @@ public class SourceSeparationHelper {
         }
 
         OkHttpClient client = new OkHttpClient.Builder()
-                .readTimeout(300, java.util.concurrent.TimeUnit.SECONDS) // Proses AI butuh waktu agak lama
+                .readTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
                 .build();
 
         RequestBody fileBody = RequestBody.create(MediaType.parse("audio/*"), originalFile);
@@ -65,8 +65,6 @@ public class SourceSeparationHelper {
                     return;
                 }
 
-                // Simpan audio hasil pemisahan (accompaniment.wav) ke cache storage Android
-                // Paksa simpan sebagai .mp3 menggunakan timestamp agar tidak tertimpa file lama
                 File separatedFile = new File(context.getCacheDir(), "separated_" + System.currentTimeMillis() + ".mp3");
                 try (InputStream is = response.body().byteStream();
                      FileOutputStream fos = new FileOutputStream(separatedFile)) {
@@ -77,7 +75,6 @@ public class SourceSeparationHelper {
                         fos.write(buffer, 0, bytesRead);
                     }
 
-                    // Berhasil, kembalikan path audio yang sudah bersih
                     callback.onSuccess(separatedFile.getAbsolutePath());
                 } catch (Exception e) {
                     callback.onError(e);

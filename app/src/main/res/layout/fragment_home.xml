@@ -38,7 +38,8 @@
                         android:hint="@string/hint_youtube_url"
                         android:inputType="textUri"
                         android:minHeight="48dp"
-                        style="style/widget."/>
+                        style="style/widget."
+                        android:textColor="?attr/colorOnBackground"/>
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -54,7 +55,9 @@
                             android:text="@string/btn_convert_url"
                             app:cornerRadius="10dp"
                             app:icon="@android:drawable/ic_menu_upload"
-                            style="@style/Widget.Material3.Button.OutlinedButton"/>
+
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:textColor="?attr/colorOnBackground" />
 
                         <Button
                             android:id="@+id/btn_pick_file"
@@ -64,7 +67,8 @@
                             android:layout_weight="1"
                             android:text="@string/btn_pick_local_file"
                             app:cornerRadius="10dp"
-                            app:icon="@android:drawable/ic_menu_gallery" />
+                            app:icon="@android:drawable/ic_menu_gallery"
+                            android:textColor="?attr/colorOnBackground"/>
                     </LinearLayout>
 
                     <TextView
@@ -73,7 +77,8 @@
                         android:layout_height="wrap_content"
                         android:textAlignment="center"
                         android:layout_marginTop="8dp"
-                        android:text="@string/status_ready_process" />
+                        android:text="@string/status_ready_process"
+                        android:textColor="?attr/colorOnBackground"/>
 
                     <ProgressBar
                         android:id="@+id/progress_bar"
@@ -85,16 +90,17 @@
 
                     <Button
                         android:id="@+id/button_download"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="center_horizontal"
                         android:layout_marginTop="8dp"
                         android:text="@string/btn_download_audio"
                         android:visibility="gone"
-                        tools:visibility="visible"
                         app:cornerRadius="10dp"
                         app:icon="@drawable/baseline_download_24"
-                        style="@style/Widget.Material3.Button.OutlinedButton"/>
+                        tools:visibility="visible"
+                        android:textColor="?attr/colorOnBackground"/>
 
                     <Button
                         android:id="@+id/button_detect_pitch"
@@ -107,7 +113,8 @@
                         android:text="@string/btn_analyze_detect"
                         android:visibility="gone"
                         tools:visibility="visible"
-                        app:icon="@android:drawable/ic_popup_sync"/>
+                        app:icon="@android:drawable/ic_popup_sync"
+                        android:textColor="?attr/colorOnBackground"/>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -231,7 +238,8 @@
                     app:cornerRadius="10dp"
                     android:layout_gravity="right"
                     android:text="@string/exportChord"
-                    android:id="@+id/exportChord"/>
+                    android:id="@+id/exportChord"
+                    android:textColor="?attr/colorOnBackground"/>
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

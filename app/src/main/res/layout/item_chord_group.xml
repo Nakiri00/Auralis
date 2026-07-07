@@ -36,7 +36,7 @@
                 android:text="C major"
                 android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="?attr/colorOnSurface"
+                android:textColor="?attr/colorOnBackground"
             />
 
             <ImageButton
@@ -46,7 +46,6 @@
                 android:src="@android:drawable/ic_media_play"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="Play chord audio"
-                android:tint="?attr/colorPrimary"
             />
 
         </LinearLayout>

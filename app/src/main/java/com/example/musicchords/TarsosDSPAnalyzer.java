@@ -34,10 +34,6 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy{
                     callback.onError(new Exception("File not found: " + audioPath));
                     return;
                 }
-                File file = new File(audioPath);
-                Log.d("DEBUG", "Exists: " + file.exists());
-                Log.d("DEBUG", "Size: " + file.length());
-                Log.d("DEBUG", "Can Read: " + file.canRead());
                 AudioData decoded = decodeAudio(audioPath);
                 if (decoded == null) {
                     callback.onError(new Exception("Failed to decode audio"));
@@ -49,7 +45,6 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy{
                 int sampleRate = decoded.sampleRate;
 
                 int bufferSize = 8192;
-                // Testing 4096 ke 6144
                 int bufferOverlap = 6144;
 
                 TarsosDSPAudioFormat format = new TarsosDSPAudioFormat(sampleRate, 16, 1, true, false);
