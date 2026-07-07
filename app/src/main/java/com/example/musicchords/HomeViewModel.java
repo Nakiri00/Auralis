@@ -177,73 +177,73 @@ public class HomeViewModel extends AndroidViewModel {
     public LiveData<String> getCapoSuggestionText() { return capoSuggestionText; }
 
 
-    private List<ChordTimestamp> postProcess(List<ChordTimestamp> raw) {
-        if (raw == null || raw.size() < 2) return raw;
-
-        // Tahap 1: Hapus duplikat berurutan agar bersih
-        List<ChordTimestamp> cleanedRaw = new ArrayList<>();
-        for (ChordTimestamp curr : raw) {
-            if (!cleanedRaw.isEmpty() && cleanedRaw.get(cleanedRaw.size() - 1).getChordName().equals(curr.getChordName())) {
-                continue;
-            }
-            cleanedRaw.add(curr);
-        }
-
-        List<ChordTimestamp> result = new ArrayList<>();
-        result.add(cleanedRaw.get(0));
-
-        // Tahap 2: Evaluasi durasi (0.4 detik adalah sweet spot untuk lagu pop/rock)
-        final double MIN_DURATION = 0.4;
-
-        for (int i = 1; i < cleanedRaw.size(); i++) {
-            ChordTimestamp prev = result.get(result.size() - 1);
-            ChordTimestamp curr = cleanedRaw.get(i);
-
-            double duration = curr.getTimeSeconds() - prev.getTimeSeconds();
-
-            if (duration < MIN_DURATION && result.size() > 1) {
-                // Chord sebelumnya terlalu singkat, cabut dari hasil
-                result.remove(result.size() - 1);
-
-                if (!result.isEmpty()) {
-                    ChordTimestamp prevPrev = result.get(result.size() - 1);
-                    // Kasus 1: Balik ke chord yang sama (C -> "-" -> C)
-                    if (prevPrev.getChordName().equals(curr.getChordName())) {
-                        continue;
-                    }
-                }
-
-                // Kasus 2: Transisi (C -> F singkat -> G). F dihapus.
-                // Jika curr adalah tanda "-", JANGAN dimasukkan. Biarkan chord sebelumnya memanjang.
-                if (!curr.getChordName().equals("-")) {
-                    result.add(new ChordTimestamp(prev.getTimeSeconds(), curr.getChordName()));
-                }
-            } else {
-                // Pastikan tidak ada duplikat setelah penggabungan
-                if (!curr.getChordName().equals(prev.getChordName())) {
-                    result.add(curr);
-                }
-            }
-        }
-
-        // Tahap 3: Pembersihan Akhir (Hapus tanda "-" jika durasinya hanya numpang lewat di akhir proses)
-        List<ChordTimestamp> finalResult = new ArrayList<>();
-        for (int i = 0; i < result.size(); i++) {
-            if (result.get(i).getChordName().equals("-")) {
-                // Cek durasi tanda "-" ini. Jika kurang dari 1 detik, abaikan saja.
-                double duration = (i < result.size() - 1)
-                        ? result.get(i+1).getTimeSeconds() - result.get(i).getTimeSeconds()
-                        : 0;
-                if (duration > 1.0) {
-                    finalResult.add(result.get(i)); // Hanya pertahankan "-" jika memang lagunya berhenti lama
-                }
-            } else {
-                finalResult.add(result.get(i));
-            }
-        }
-
-        return finalResult;
-    }
+//    private List<ChordTimestamp> postProcess(List<ChordTimestamp> raw) {
+//        if (raw == null || raw.size() < 2) return raw;
+//
+//        // Tahap 1: Hapus duplikat berurutan agar bersih
+//        List<ChordTimestamp> cleanedRaw = new ArrayList<>();
+//        for (ChordTimestamp curr : raw) {
+//            if (!cleanedRaw.isEmpty() && cleanedRaw.get(cleanedRaw.size() - 1).getChordName().equals(curr.getChordName())) {
+//                continue;
+//            }
+//            cleanedRaw.add(curr);
+//        }
+//
+//        List<ChordTimestamp> result = new ArrayList<>();
+//        result.add(cleanedRaw.get(0));
+//
+//        // Tahap 2: Evaluasi durasi (0.4 detik adalah sweet spot untuk lagu pop/rock)
+//        final double MIN_DURATION = 0.4;
+//
+//        for (int i = 1; i < cleanedRaw.size(); i++) {
+//            ChordTimestamp prev = result.get(result.size() - 1);
+//            ChordTimestamp curr = cleanedRaw.get(i);
+//
+//            double duration = curr.getTimeSeconds() - prev.getTimeSeconds();
+//
+//            if (duration < MIN_DURATION && result.size() > 1) {
+//                // Chord sebelumnya terlalu singkat, cabut dari hasil
+//                result.remove(result.size() - 1);
+//
+//                if (!result.isEmpty()) {
+//                    ChordTimestamp prevPrev = result.get(result.size() - 1);
+//                    // Kasus 1: Balik ke chord yang sama (C -> "-" -> C)
+//                    if (prevPrev.getChordName().equals(curr.getChordName())) {
+//                        continue;
+//                    }
+//                }
+//
+//                // Kasus 2: Transisi (C -> F singkat -> G). F dihapus.
+//                // Jika curr adalah tanda "-", JANGAN dimasukkan. Biarkan chord sebelumnya memanjang.
+//                if (!curr.getChordName().equals("-")) {
+//                    result.add(new ChordTimestamp(prev.getTimeSeconds(), curr.getChordName()));
+//                }
+//            } else {
+//                // Pastikan tidak ada duplikat setelah penggabungan
+//                if (!curr.getChordName().equals(prev.getChordName())) {
+//                    result.add(curr);
+//                }
+//            }
+//        }
+//
+//        // Tahap 3: Pembersihan Akhir (Hapus tanda "-" jika durasinya hanya numpang lewat di akhir proses)
+//        List<ChordTimestamp> finalResult = new ArrayList<>();
+//        for (int i = 0; i < result.size(); i++) {
+//            if (result.get(i).getChordName().equals("-")) {
+//                // Cek durasi tanda "-" ini. Jika kurang dari 1 detik, abaikan saja.
+//                double duration = (i < result.size() - 1)
+//                        ? result.get(i+1).getTimeSeconds() - result.get(i).getTimeSeconds()
+//                        : 0;
+//                if (duration > 1.0) {
+//                    finalResult.add(result.get(i)); // Hanya pertahankan "-" jika memang lagunya berhenti lama
+//                }
+//            } else {
+//                finalResult.add(result.get(i));
+//            }
+//        }
+//
+//        return finalResult;
+//    }
 
     // Setter untuk memasukkan data setelah analisis selesai
     public void setDetectedChords(List<ChordTimestamp> chords) {
@@ -369,7 +369,12 @@ public class HomeViewModel extends AndroidViewModel {
                     audioFilePath = destFile.getAbsolutePath();
                     audioTitle = resolvedTitle;
                     detectedChords.clear();
+                    setDetectedChords(new ArrayList<>());
+                    upcomingChords.setValue(new ArrayList<>());
                     currentChordDisplay.setValue("-");
+                    detectedKeyText.setValue("");
+                    capoSuggestionText.setValue("");
+                    chordProgress.setValue(0);
                     statusText.setValue("File Siap: " + resolvedTitle);
                     fileLoaded.setValue(true);
                     setupAudioPlayer(audioFilePath, audioTitle);
@@ -585,6 +590,10 @@ public class HomeViewModel extends AndroidViewModel {
         statusText.setValue("Membersihkan audio via Server (Spleeter)...");
         detectedChords.clear();
         setDetectedChords(new ArrayList<>());
+        upcomingChords.setValue(new ArrayList<>());
+        detectedKeyText.setValue("");
+        capoSuggestionText.setValue("");
+        chordProgress.setValue(0);
 
         Context context = getApplication().getApplicationContext();
         SourceSeparationHelper separatorHelper = new SourceSeparationHelper();
@@ -621,36 +630,42 @@ public class HomeViewModel extends AndroidViewModel {
     private void executeAnalysis(String fileToAnalyze, String title, String originalAudioPath, boolean isPremiumUser) {
         analysisRepository.analyze(fileToAnalyze, isPremiumUser, new AudioAnalysisRepository.AnalysisCallback() {
             @Override
-            public void onComplete(List<ChordTimestamp> results, int keyIndex) {  // ← terima keyIndex
+            public void onComplete(List<ChordTimestamp> results, int keyIndex) {
                 detectedChords.clear();
-                detectedChords.addAll(results);
-                setDetectedChords(new ArrayList<>(detectedChords));
 
-                // Bangun teks hasil analisis
-                StringBuilder sb = new StringBuilder();
-                sb.append(title != null ? title : "Audio").append("\n");
-                for (ChordTimestamp item : results) {
-                    String name = item.getChordName();
-                    String roman = name.equals("-")
-                            ? ""
-                            : "  (" + KeyDetector.toRomanNumeral(keyIndex, name) + ")";
-                    sb.append(String.format(java.util.Locale.US, "[%02d:%02d] %s%s\n",
-                            (int)(item.getTimeSeconds() / 60),
-                            (int)(item.getTimeSeconds() % 60),
-                            name,
-                            roman));
-                }
-
-                // Hasilkan info key dan capo dari keyIndex
                 String keyName    = KeyDetector.getKeyName(keyIndex);
                 String capoAdvice = CapoSuggester.suggest(keyIndex);
+
+                StringBuilder sb = new StringBuilder();
+                sb.append(title != null ? title : "Audio").append("\n");
+
+                sb.append("KEY: ").append(keyName).append("\n");
+                sb.append("CAPO: ").append(capoAdvice).append("\n");
+                // --------------------------------------------------
+
+                for (ChordTimestamp item : results) {
+                    String name = item.getChordName();
+                    String roman = name.equals("-") || name.equals("N/A")
+                            ? ""
+                            : " (" + KeyDetector.toRomanNumeral(keyIndex, name) + ")";
+
+                    String chordWithRoman = name + roman;
+                    detectedChords.add(new ChordTimestamp(item.getTimeSeconds(), chordWithRoman));
+
+                    sb.append(String.format(java.util.Locale.US, "[%02d:%02d] %s\n",
+                            (int)(item.getTimeSeconds() / 60),
+                            (int)(item.getTimeSeconds() % 60),
+                            chordWithRoman));
+                }
+
+                setDetectedChords(new ArrayList<>(detectedChords));
 
                 handler.post(() -> {
                     isAnalyzing.setValue(false);
                     currentChordDisplay.setValue(results.isEmpty() ? "Tidak ada chord terdeteksi." : "Analisis Selesai");
                     statusText.setValue("Analisis selesai.");
                     detectedKeyText.setValue("Key: " + keyName);
-                    capoSuggestionText.setValue(capoAdvice);              
+                    capoSuggestionText.setValue(capoAdvice);
 
                     historyRepository.saveOrUpdateHistory(title, fileToAnalyze, sb.toString(),
                             new HistoryRepository.OnSaveListener() {
@@ -670,7 +685,6 @@ public class HomeViewModel extends AndroidViewModel {
                 });
             }
         });
-
     }
 
     // ─── Load History ───────────────────────────────────────────────────────
@@ -683,7 +697,12 @@ public class HomeViewModel extends AndroidViewModel {
         audioTitle = title != null ? title : "";
         stopChordSync();
         detectedChords.clear();
+        setDetectedChords(new ArrayList<>());
+        upcomingChords.setValue(new ArrayList<>());
+        chordProgress.setValue(0);
         currentChordDisplay.setValue("-");
+        detectedKeyText.setValue("");
+        capoSuggestionText.setValue("");
 
         if (savedChordData != null && !savedChordData.isEmpty()) {
             parseAndLoadChords(savedChordData);
@@ -698,21 +717,31 @@ public class HomeViewModel extends AndroidViewModel {
     private void parseAndLoadChords(String savedData) {
         detectedChords.clear();
         int count = 0;
+
+        String parsedKey = "";
+        String parsedCapo = "";
+
         for (String line : savedData.split("\n")) {
             line = line.trim();
-            if (line.startsWith("[") && line.contains("]")) {
+
+            if (line.startsWith("KEY:")) {
+                parsedKey = line.substring(4).trim();
+            } else if (line.startsWith("CAPO:")) {
+                parsedCapo = line.substring(5).trim();
+            }
+            else if (line.startsWith("[") && line.contains("]")) {
                 try {
                     int bracket = line.indexOf("]");
                     String[] parts = line.substring(1, bracket).split(":");
                     if (parts.length == 2) {
                         double totalSec =
-                            Integer.parseInt(parts[0]) * 60 +
-                            Integer.parseInt(parts[1]);
+                                Integer.parseInt(parts[0]) * 60 +
+                                        Integer.parseInt(parts[1]);
                         detectedChords.add(
-                            new ChordTimestamp(
-                                totalSec,
-                                line.substring(bracket + 1).trim()
-                            )
+                                new ChordTimestamp(
+                                        totalSec,
+                                        line.substring(bracket + 1).trim()
+                                )
                         );
                         count++;
                     }
@@ -721,12 +750,16 @@ public class HomeViewModel extends AndroidViewModel {
                 }
             }
         }
+
         setDetectedChords(new ArrayList<>(detectedChords));
         currentChordDisplay.setValue(
-            count > 0
-                ? "Data Loaded (" + count + " Chords)"
-                : "No chord data found."
+                count > 0
+                        ? "Data Loaded (" + count + " Chords)"
+                        : "No chord data found."
         );
+
+        detectedKeyText.setValue(!parsedKey.isEmpty() ? "Key: " + parsedKey : "");
+        capoSuggestionText.setValue(!parsedCapo.isEmpty() ? parsedCapo : "");
     }
 
     @Override

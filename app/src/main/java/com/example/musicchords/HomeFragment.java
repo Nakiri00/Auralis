@@ -430,12 +430,16 @@ public class HomeFragment extends Fragment {
             if (keyText != null && !keyText.isEmpty()) {
                 tvDetectedKey.setText(keyText);
                 tvDetectedKey.setVisibility(View.VISIBLE);
+            } else {
+                tvDetectedKey.setVisibility(View.GONE);
             }
         });
         viewModel.getCapoSuggestionText().observe(getViewLifecycleOwner(), capo -> {
             if (capo != null && !capo.isEmpty()) {
                 tvCapoSuggestion.setText(capo);
                 tvCapoSuggestion.setVisibility(View.VISIBLE);
+            } else {
+                tvCapoSuggestion.setVisibility(View.GONE);
             }
         });
 

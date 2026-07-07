@@ -258,7 +258,7 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy{
 
                         int keyIndex = KeyDetector.detectKey(globalChroma);
                         if (keyIndex >= 0) {
-                            List<ChordTimestamp> afterKeyFix = applyKeyConsistency(detectedChords, globalChroma, keyIndex);
+                            List<ChordTimestamp> afterKeyFix = applyKeyConsistency(detectedChords, keyIndex);
                             List<ChordTimestamp> finalChords = smoothTransitions(afterKeyFix);
                             callback.onComplete(finalChords, keyIndex);
                         } else {
@@ -289,7 +289,7 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy{
      *  - Major/Minor triad  : if not diatonic, try opposite quality
      */
     private List<ChordTimestamp> applyKeyConsistency(
-            List<ChordTimestamp> rawChords, float[] globalChroma, int keyIndex) {
+            List<ChordTimestamp> rawChords, int keyIndex) {
 
         if (rawChords.isEmpty()) return rawChords;
 
@@ -309,25 +309,7 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy{
 
             String corrected = chord;
 
-            if (chord.endsWith("5") || chord.endsWith("sus2") || chord.endsWith("sus4")) {
-                corrected = chord;
-            } else if (chord.endsWith("m7")) {
-                String rootName = chord.substring(0, chord.length() - 2);
-                String candidate = rootName + " Minor";
-                if (diatonic.contains(candidate)) corrected = candidate;
-                if (corrected.equals(chord)) {
-                    candidate = rootName + " Major";
-                    if (diatonic.contains(candidate)) corrected = candidate;
-                }
-            } else if (chord.endsWith("7")) {
-                String rootName = chord.substring(0, chord.length() - 1);
-                String candidate = rootName + " Major";
-                if (diatonic.contains(candidate)) corrected = candidate;
-                if (corrected.equals(chord)) {
-                    candidate = rootName + " Minor";
-                    if (diatonic.contains(candidate)) corrected = candidate;
-                }
-            } else if (chord.endsWith(" Major")) {
+            if (chord.endsWith(" Major")) {
                 String candidate = chord.replace(" Major", " Minor");
                 if (diatonic.contains(candidate)) corrected = candidate;
             } else if (chord.endsWith(" Minor")) {
