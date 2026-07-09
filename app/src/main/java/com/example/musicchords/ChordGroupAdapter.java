@@ -15,13 +15,10 @@ public class ChordGroupAdapter
     extends RecyclerView.Adapter<ChordGroupAdapter.GroupViewHolder>
 {
 
-    // ─── Callback ────────────────────────────────────────────────────────────
 
     public interface OnPlayListener {
         void onPlay(ChordGroup group);
     }
-
-    // ─── State ───────────────────────────────────────────────────────────────
 
     private final List<ChordGroup> groups = new ArrayList<>();
     private OnPlayListener playListener;
@@ -35,8 +32,6 @@ public class ChordGroupAdapter
         groups.addAll(newGroups);
         notifyDataSetChanged();
     }
-
-    // ─── RecyclerView Adapter ─────────────────────────────────────────────────
 
     @NonNull
     @Override
@@ -65,24 +60,16 @@ public class ChordGroupAdapter
             if (playListener != null) playListener.onPlay(group);
         });
 
-        // Sembunyikan tombol play jika tidak ada audio
         holder.btnPlay.setVisibility(
             group.getAudioResId() != 0 ? View.VISIBLE : View.GONE
         );
 
-        // Setup inner horizontal RecyclerView untuk semua posisi
         PositionAdapter positionAdapter = new PositionAdapter(
-            group.getPositions()
+                group.getPositions(),
+                group.getBaseFrets()
         );
-        holder.rvPositions.setLayoutManager(
-            new LinearLayoutManager(
-                holder.itemView.getContext(),
-                LinearLayoutManager.HORIZONTAL,
-                false
-            )
-        );
+        holder.rvPositions.setLayoutManager(new LinearLayoutManager(holder.itemView.getContext(), LinearLayoutManager.HORIZONTAL, false));
         holder.rvPositions.setAdapter(positionAdapter);
-        // Penting: nonaktifkan scroll nested agar outer RV tetap bisa di-scroll
         holder.rvPositions.setNestedScrollingEnabled(false);
     }
 
@@ -91,7 +78,6 @@ public class ChordGroupAdapter
         return groups.size();
     }
 
-    // ─── Outer ViewHolder ─────────────────────────────────────────────────────
 
     static class GroupViewHolder extends RecyclerView.ViewHolder {
 
@@ -107,36 +93,30 @@ public class ChordGroupAdapter
         }
     }
 
-    // ─── Inner adapter untuk posisi (horizontal) ──────────────────────────────
-
-    static class PositionAdapter
-        extends RecyclerView.Adapter<PositionAdapter.PosViewHolder>
-    {
+    static class PositionAdapter extends RecyclerView.Adapter<PositionAdapter.PosViewHolder> {
 
         private final List<String> fretStrings;
+        private final List<Integer> baseFrets;
 
-        PositionAdapter(List<String> fretStrings) {
+        PositionAdapter(List<String> fretStrings, List<Integer> baseFrets) {
             this.fretStrings = fretStrings;
+            this.baseFrets = baseFrets;
         }
 
         @NonNull
         @Override
-        public PosViewHolder onCreateViewHolder(
-            @NonNull ViewGroup parent,
-            int viewType
-        ) {
-            View v = LayoutInflater.from(parent.getContext()).inflate(
-                R.layout.item_chord_position,
-                parent,
-                false
-            );
+        public PosViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_chord_position, parent, false);
             return new PosViewHolder(v);
         }
 
         @Override
         public void onBindViewHolder(@NonNull PosViewHolder holder, int pos) {
             String fretStr = fretStrings.get(pos);
-            holder.tvLabel.setText("Posisi " + (pos + 1));
+            int currentBaseFret = baseFrets.get(pos);
+
+            holder.tvLabel.setText("Fret " + currentBaseFret);
+
             holder.chordView.setChordPositions(fretStr);
             holder.tvFretString.setText(fretStr.replace("-1", "X"));
         }

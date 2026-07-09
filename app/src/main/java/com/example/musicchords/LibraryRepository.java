@@ -78,7 +78,6 @@ public class LibraryRepository {
                 if (chordInfoList == null) continue;
 
                 for (ChordInfo info : chordInfoList) {
-                    // Hanya tampilkan major dan minor
                     if (
                         !info.suffix.equals("major") &&
                         !info.suffix.equals("minor")
@@ -89,15 +88,16 @@ public class LibraryRepository {
 
                     String chordName = info.key + " " + info.suffix;
 
-                    // Kumpulkan semua posisi, konversi fret relatif → absolut
+
                     List<String> positionFretStrings = new ArrayList<>();
+                    List<Integer> baseFretsList = new ArrayList<>();
                     for (Position pos : info.positions) {
                         if (pos.frets == null || pos.frets.isEmpty()) continue;
                         positionFretStrings.add(buildAbsoluteFretString(pos));
+                        baseFretsList.add(pos.baseFret);
                     }
                     if (positionFretStrings.isEmpty()) continue;
 
-                    // Resolve audio resource (e.g. "chord_c_major", "chord_csharp_minor")
                     String keyClean = info.key
                         .replace("#", "sharp")
                         .toLowerCase();
@@ -115,7 +115,9 @@ public class LibraryRepository {
                         new ChordGroup(
                             chordName,
                             positionFretStrings,
-                            audioResId
+                            audioResId,
+                                baseFretsList
+
                         )
                     );
                 }

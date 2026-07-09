@@ -9,6 +9,7 @@
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent">
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -20,9 +21,9 @@
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                app:cardBackgroundColor="@android:color/transparent"
                 app:cardCornerRadius="16dp"
                 app:cardElevation="0dp"
-                app:cardBackgroundColor="@android:color/transparent"
                 app:strokeWidth="1dp">
 
                 <LinearLayout
@@ -33,52 +34,60 @@
 
                     <EditText
                         android:id="@+id/url_input"
+                        style="@style/Widget.Material3.TextInputEditText.OutlinedBox"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="@string/hint_youtube_url"
                         android:inputType="textUri"
                         android:minHeight="48dp"
-                        style="style/widget."
-                        android:textColor="?attr/colorOnBackground"/>
+                        android:textColor="?attr/colorOnBackground" />
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal">
+                        android:orientation="horizontal"
+                        android:baselineAligned="false">
 
                         <Button
                             android:id="@+id/button_convert"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:layout_marginEnd="8dp"
-                            android:text="@string/btn_convert_url"
-                            app:cornerRadius="10dp"
-                            app:icon="@android:drawable/ic_menu_upload"
-
                             style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:textColor="?attr/colorOnBackground" />
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_marginEnd="8dp"
+                            android:layout_weight="1"
+                            android:text="@string/btn_convert_url"
+                            android:textColor="?attr/colorOnBackground"
+                            android:maxLines="1"
+                            app:autoSizeTextType="uniform"
+                            app:autoSizeMinTextSize="10sp"
+                            app:autoSizeMaxTextSize="14sp"
+                            app:cornerRadius="10dp"
+                            app:icon="@android:drawable/ic_menu_upload" />
 
                         <Button
                             android:id="@+id/btn_pick_file"
                             style="@style/Widget.Material3.Button.OutlinedButton"
                             android:layout_width="0dp"
-                            android:layout_height="wrap_content"
+                            android:layout_height="match_parent"
                             android:layout_weight="1"
                             android:text="@string/btn_pick_local_file"
+                            android:textColor="?attr/colorOnBackground"
+                            android:maxLines="1"
+                            app:autoSizeTextType="uniform"
+                            app:autoSizeMinTextSize="10sp"
+                            app:autoSizeMaxTextSize="14sp"
                             app:cornerRadius="10dp"
-                            app:icon="@android:drawable/ic_menu_gallery"
-                            android:textColor="?attr/colorOnBackground"/>
+                            app:icon="@android:drawable/ic_menu_gallery" />
                     </LinearLayout>
 
                     <TextView
                         android:id="@+id/textview_result"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:textAlignment="center"
                         android:layout_marginTop="8dp"
                         android:text="@string/status_ready_process"
-                        android:textColor="?attr/colorOnBackground"/>
+                        android:textAlignment="center"
+                        android:textColor="?attr/colorOnBackground" />
 
                     <ProgressBar
                         android:id="@+id/progress_bar"
@@ -86,7 +95,7 @@
                         android:layout_height="wrap_content"
                         android:layout_gravity="center"
                         android:layout_marginTop="8dp"
-                        android:visibility="gone"/>
+                        android:visibility="gone" />
 
                     <Button
                         android:id="@+id/button_download"
@@ -96,25 +105,25 @@
                         android:layout_gravity="center_horizontal"
                         android:layout_marginTop="8dp"
                         android:text="@string/btn_download_audio"
+                        android:textColor="?attr/colorOnBackground"
                         android:visibility="gone"
                         app:cornerRadius="10dp"
                         app:icon="@drawable/baseline_download_24"
-                        tools:visibility="visible"
-                        android:textColor="?attr/colorOnBackground"/>
+                        tools:visibility="visible" />
 
                     <Button
                         android:id="@+id/button_detect_pitch"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_gravity="center"
-                        style="@style/Widget.Material3.Button.OutlinedButton"
-                        app:cornerRadius="10dp"
                         android:layout_marginTop="4dp"
                         android:text="@string/btn_analyze_detect"
+                        android:textColor="?attr/colorOnBackground"
                         android:visibility="gone"
-                        tools:visibility="visible"
+                        app:cornerRadius="10dp"
                         app:icon="@android:drawable/ic_popup_sync"
-                        android:textColor="?attr/colorOnBackground"/>
+                        tools:visibility="visible" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
@@ -122,8 +131,8 @@
                 android:id="@+id/layout_audio_player"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
                 android:layout_marginTop="24dp"
+                android:orientation="vertical"
                 android:padding="16dp"
                 android:visibility="gone"
                 tools:visibility="visible">
@@ -132,49 +141,49 @@
                     android:id="@+id/tv_playing_title"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/placeholder_song_title"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp"
+                    android:ellipsize="end"
                     android:gravity="center"
                     android:maxLines="2"
-                    android:ellipsize="end"
-                    android:layout_marginBottom="8dp" />
+                    android:text="@string/placeholder_song_title"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/tv_result_chord"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    android:gravity="center"
                     android:text="-"
                     android:textSize="48sp"
-                    android:textStyle="bold"
-                    android:gravity="center"
-                    android:layout_marginBottom="16dp" />
+                    android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/tv_detected_key"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:drawablePadding="6dp"
+                    android:padding="8dp"
                     android:text=""
                     android:textSize="16sp"
                     android:textStyle="bold"
-                    android:visibility="gone"
-                    android:drawablePadding="6dp"
-                    android:padding="8dp" />
+                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/tv_capo_suggestion"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:padding="8dp"
                     android:text=""
                     android:textSize="14sp"
-                    android:visibility="gone"
-                    android:padding="8dp" />
+                    android:visibility="gone" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/text_up_next"
                     android:layout_marginHorizontal="16dp"
+                    android:text="@string/text_up_next"
                     android:textStyle="bold" />
 
                 <androidx.recyclerview.widget.RecyclerView
@@ -196,50 +205,51 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
                     <ImageButton
                         android:id="@+id/btn_play"
                         android:layout_width="48dp"
                         android:layout_height="48dp"
-                        android:src="@android:drawable/ic_media_play"
                         android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="@string/cd_play" />
+                        android:contentDescription="@string/cd_play"
+                        android:src="@android:drawable/ic_media_play" />
 
                     <ImageButton
                         android:id="@+id/btn_pause"
                         android:layout_width="48dp"
                         android:layout_height="48dp"
-                        android:src="@android:drawable/ic_media_pause"
                         android:background="?attr/selectableItemBackgroundBorderless"
-                        android:visibility="gone"
-                        android:contentDescription="@string/cd_pause" />
+                        android:contentDescription="@string/cd_pause"
+                        android:src="@android:drawable/ic_media_pause"
+                        android:visibility="gone" />
 
                     <SeekBar
                         android:id="@+id/seekbar_audio"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:layout_marginStart="8dp" />
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1" />
 
                     <TextView
                         android:id="@+id/tv_duration"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
                         android:text="00:00 / 00:00"
-                        android:textSize="12sp"
-                        android:layout_marginStart="8dp"/>
+                        android:textSize="12sp" />
                 </LinearLayout>
+
                 <Button
+                    android:id="@+id/exportChord"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
-                    app:cornerRadius="10dp"
                     android:layout_gravity="right"
                     android:text="@string/exportChord"
-                    android:id="@+id/exportChord"
-                    android:textColor="?attr/colorOnBackground"/>
+                    android:textColor="?attr/colorOnBackground"
+                    app:cornerRadius="10dp" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>
