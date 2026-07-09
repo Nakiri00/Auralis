@@ -21,7 +21,7 @@ import okhttp3.Response;
 public class LibrosaAnalyzer implements ChordAnalyzerStrategy {
 
     private static final String TAG = "LibrosaAnalyzer";
-    private static final String NGROK_URL = BuildConfig.NGROK_URL + "/analyze_chords";
+    private static final String Public_Ip = BuildConfig.Public_IP + "/analyze_chords";
 
     @Override
     public void analyzeChords(String audioPath, int sampleRate, AudioAnalysisRepository.AnalysisCallback callback) {
@@ -31,7 +31,6 @@ public class LibrosaAnalyzer implements ChordAnalyzerStrategy {
             return;
         }
 
-        // Timeout diperpanjang karena pemrosesan AI di server butuh waktu
         OkHttpClient client = new OkHttpClient.Builder()
                 .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
                 .build();
@@ -44,7 +43,7 @@ public class LibrosaAnalyzer implements ChordAnalyzerStrategy {
 
         try {
             Request request = new Request.Builder()
-                    .url(NGROK_URL)
+                    .url(Public_Ip)
                     .post(requestBody)
                     .build();
 
@@ -52,7 +51,7 @@ public class LibrosaAnalyzer implements ChordAnalyzerStrategy {
                 @Override
                 public void onFailure(Call call, IOException e) {
                     Log.e(TAG, "Gagal menghubungi server Librosa", e);
-                    callback.onError(new Exception("Koneksi ke Server Premium (Librosa) gagal."));
+                    callback.onError(new Exception("Koneksi ke Server Librosa gagal."));
                 }
 
                 @Override
@@ -91,7 +90,7 @@ public class LibrosaAnalyzer implements ChordAnalyzerStrategy {
                 }
             });
         } catch (IllegalArgumentException | NullPointerException e) {
-            Log.e(TAG, "URL API tidak valid: " + NGROK_URL, e);
+            Log.e(TAG, "URL API tidak valid: " + Public_Ip, e);
             callback.onError(new Exception("Konfigurasi URL Server salah"));
         }
     }

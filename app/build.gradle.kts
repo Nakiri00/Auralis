@@ -29,8 +29,8 @@ android {
         )
         buildConfigField(
             "String",
-            "NGROK_URL",
-            "\"${localProperties.getProperty("NGROK_API_URL", "http://10.0.2.2:8000/separate")}\""
+            "Public_IP",
+            "\"${localProperties.getProperty("Public_IP", "http://157.230.241.45:8000")}\""
         )
     }
 

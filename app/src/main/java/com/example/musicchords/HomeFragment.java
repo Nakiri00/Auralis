@@ -240,8 +240,8 @@ public class HomeFragment extends Fragment {
             String path = viewModel.getAudioFilePath();
             if (path != null && !path.isEmpty()) {
                 String[] options = {
-                        "Mode Standar (TarsosDSP)",
-                        "Mode Premium (Librosa)"
+                        "TarsosDSP",
+                        "Librosa"
                 };
 
                 new android.app.AlertDialog.Builder(getContext())

@@ -587,7 +587,7 @@ public class HomeViewModel extends AndroidViewModel {
         isAnalyzing.setValue(true);
 
         currentChordDisplay.setValue("Memisahkan Vokal...");
-        statusText.setValue("Membersihkan audio via Server (Spleeter)...");
+        statusText.setValue("Membersihkan audio...");
         detectedChords.clear();
         setDetectedChords(new ArrayList<>());
         upcomingChords.setValue(new ArrayList<>());

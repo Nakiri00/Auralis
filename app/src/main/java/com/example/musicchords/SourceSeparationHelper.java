@@ -20,9 +20,7 @@ import okhttp3.Response;
 public class SourceSeparationHelper {
 
     private static final String TAG = "SourceSeparation";
-    // Ganti dengan IP laptop Anda saat menjalankan FastAPI (misal: 192.168.1.5)
-    // Jika menggunakan ngrok, masukkan URL ngrok-nya di sini
-    private static final String NGROK_URL = BuildConfig.NGROK_URL +"/separate";
+    private static final String Public_Ip = BuildConfig.Public_IP +"/separate";
 
     public interface SeparationCallback {
         void onSuccess(String separatedAudioPath);
@@ -47,7 +45,7 @@ public class SourceSeparationHelper {
                 .build();
 
         Request request = new Request.Builder()
-                .url(NGROK_URL)
+                .url(Public_Ip)
                 .post(requestBody)
                 .build();
 
