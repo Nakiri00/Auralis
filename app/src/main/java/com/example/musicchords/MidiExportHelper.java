@@ -11,6 +11,15 @@ import com.leff.midi.event.NoteOn;
 import com.leff.midi.event.meta.Tempo;
 import com.leff.midi.event.meta.TimeSignature;
 
+import android.content.ContentValues;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.MediaStore;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+
 import java.io.File;
 import java.util.List;
 
@@ -87,14 +96,47 @@ public class MidiExportHelper {
             midiFile.addTrack(tempoTrack);
             midiFile.addTrack(noteTrack);
 
-            // Simpan ke direktori Music internal aplikasi
-            File outputDir = context.getExternalFilesDir(Environment.DIRECTORY_MUSIC);
-            if (!outputDir.exists()) outputDir.mkdirs();
+            File cacheFile = new File(context.getCacheDir(), fileName + ".mid");
+            midiFile.writeToFile(cacheFile);
 
-            File outputFile = new File(outputDir, fileName + ".mid");
-            midiFile.writeToFile(outputFile);
+            File outputFile = null;
 
-            Log.d(TAG, "Berhasil mengekspor MIDI ke: " + outputFile.getAbsolutePath());
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Downloads.DISPLAY_NAME, fileName + ".mid");
+                values.put(MediaStore.Downloads.MIME_TYPE, "audio/midi");
+                values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+
+                Uri uri = context.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                if (uri != null) {
+                    try (InputStream is = new FileInputStream(cacheFile);
+                         OutputStream os = context.getContentResolver().openOutputStream(uri)) {
+                        byte[] buffer = new byte[8192];
+                        int bytesRead;
+                        while ((bytesRead = is.read(buffer)) != -1) {
+                            os.write(buffer, 0, bytesRead);
+                        }
+                    }
+                    Log.d(TAG, "Berhasil mengekspor MIDI ke folder Download publik via MediaStore");
+                    outputFile = cacheFile;
+                }
+            } else {
+                // Untuk Android 9 (API 28) ke bawah menggunakan akses File biasa
+                File outputDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                if (!outputDir.exists()) outputDir.mkdirs();
+
+                outputFile = new File(outputDir, fileName + ".mid");
+                try (InputStream is = new FileInputStream(cacheFile);
+                     OutputStream os = new FileOutputStream(outputFile)) {
+                    byte[] buffer = new byte[8192];
+                    int bytesRead;
+                    while ((bytesRead = is.read(buffer)) != -1) {
+                        os.write(buffer, 0, bytesRead);
+                    }
+                }
+                Log.d(TAG, "Berhasil mengekspor MIDI ke folder Download legacy: " + outputFile.getAbsolutePath());
+            }
+
             return outputFile;
 
         } catch (Exception e) {

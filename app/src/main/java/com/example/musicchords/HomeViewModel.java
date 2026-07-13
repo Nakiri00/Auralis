@@ -287,7 +287,7 @@ public class HomeViewModel extends AndroidViewModel {
                     ? json.get("title").getAsString()
                     : "audio";
                 downloadLink.postValue(json.get("link").getAsString());
-                statusText.postValue("Audio Siap: " + audioTitle);
+                statusText.postValue(audioTitle);
             } else if ("processing".equalsIgnoreCase(status)) {
                 statusText.postValue(
                     "Server Sedang Memproses Video. Mohon Tunggu"
@@ -375,7 +375,7 @@ public class HomeViewModel extends AndroidViewModel {
                     detectedKeyText.setValue("");
                     capoSuggestionText.setValue("");
                     chordProgress.setValue(0);
-                    statusText.setValue("File Siap: " + resolvedTitle);
+                    statusText.setValue(resolvedTitle);
                     fileLoaded.setValue(true);
                     setupAudioPlayer(audioFilePath, audioTitle);
                 });
@@ -586,7 +586,7 @@ public class HomeViewModel extends AndroidViewModel {
         if (Boolean.TRUE.equals(isAnalyzing.getValue())) return;
         isAnalyzing.setValue(true);
 
-        currentChordDisplay.setValue("Memisahkan Vokal...");
+        currentChordDisplay.setValue("Cleaning Audio...");
         statusText.setValue("Membersihkan audio...");
         detectedChords.clear();
         setDetectedChords(new ArrayList<>());
@@ -602,10 +602,9 @@ public class HomeViewModel extends AndroidViewModel {
             @Override
             public void onSuccess(String separatedAudioPath) {
                 handler.post(() -> {
-                    // Update UI berdasarkan mode yang dipilih
                     String mode = isPremiumUser ? "Librosa" : "TarsosDSP";
-                    statusText.setValue("Menganalisis dengan " + mode + "...");
-                    currentChordDisplay.setValue("Menganalisis Chords...");
+                    statusText.setValue("Analysing with " + mode + "...");
+                    currentChordDisplay.setValue(mode + " is Running");
                 });
 
                 executeAnalysis(separatedAudioPath, title, audioPath, isPremiumUser);
@@ -615,13 +614,12 @@ public class HomeViewModel extends AndroidViewModel {
             public void onError(Exception e) {
                 Log.e("SeparatorDebug", "Server Spleeter Gagal, menggunakan file asli", e);
                 handler.post(() -> {
-                    toastMessage.setValue("Server pemisah vokal terputus, memakai audio asli.");
+                    toastMessage.setValue("Server Timed Out, Using Original Audio");
                     String mode = isPremiumUser ? "Librosa" : "TarsosDSP";
-                    statusText.setValue("Menganalisis dengan " + mode + "...");
-                    currentChordDisplay.setValue("Menganalisis Chords...");
+                    statusText.setValue("Analysing with " + mode + "...");
+                    currentChordDisplay.setValue(mode + " is Running");
                 });
 
-                // Fallback: Jika server mati, tetap lanjut analisis tapi pakai audio mentah (audioPath)
                 executeAnalysis(audioPath, title, audioPath, isPremiumUser);
             }
         });
@@ -662,7 +660,7 @@ public class HomeViewModel extends AndroidViewModel {
 
                 handler.post(() -> {
                     isAnalyzing.setValue(false);
-                    currentChordDisplay.setValue(results.isEmpty() ? "Tidak ada chord terdeteksi." : "Analisis Selesai");
+                    currentChordDisplay.setValue(results.isEmpty() ? "No Chords Detected" : "Chords Detected, Let's Play!");
                     statusText.setValue("Analisis selesai.");
                     detectedKeyText.setValue("Key: " + keyName);
                     capoSuggestionText.setValue(capoAdvice);
@@ -680,7 +678,7 @@ public class HomeViewModel extends AndroidViewModel {
                 Log.e(TAG, "Analysis error", e);
                 handler.post(() -> {
                     isAnalyzing.setValue(false);
-                    toastMessage.setValue("Gagal menganalisis audio: " + e.getMessage());
+                    toastMessage.setValue("Failed To Analyze: " + e.getMessage());
                     currentChordDisplay.setValue("-");
                 });
             }

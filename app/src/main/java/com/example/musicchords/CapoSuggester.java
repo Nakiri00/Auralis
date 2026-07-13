@@ -18,7 +18,7 @@ public class CapoSuggester {
         // Cek apakah sudah di easy key
         for (int easyKey : EASY_KEYS) {
             if (detectedRoot == easyKey) {
-                return "Tidak perlu capo — sudah di key " + KeyDetector.getKeyName(keyIndex);
+                return "No capo needed - already in " + KeyDetector.getKeyName(keyIndex);
             }
         }
 
@@ -28,11 +28,11 @@ public class CapoSuggester {
             for (int easyKey : EASY_KEYS) {
                 if (effectiveRoot == easyKey) {
                     String easyKeyName = ChordTemplates.NOTES[effectiveRoot] + (isMinor ? " Minor" : " Major");
-                    return "Capo fret " + capo + " → mainkan chord " + easyKeyName;
+                    return "Capo fret " + capo + " → play in " + easyKeyName;
                 }
             }
         }
 
-        return "Tidak ada saran capo yang sesuai";
+        return "There is no capo suggestion";
     }
 }

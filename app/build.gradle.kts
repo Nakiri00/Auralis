@@ -30,7 +30,7 @@ android {
         buildConfigField(
             "String",
             "Public_IP",
-            "\"${localProperties.getProperty("Public_IP", "http://157.230.241.45:8000")}\""
+            "\"${localProperties.getProperty("Public_IP", "http://10.0.2.2:8000")}\""
         )
     }
 

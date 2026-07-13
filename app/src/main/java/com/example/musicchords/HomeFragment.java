@@ -186,6 +186,7 @@ public class HomeFragment extends Fragment {
         buttonDownload.setVisibility(View.GONE);
         layoutAudioPlayer.setVisibility(View.GONE);
         btnPause.setVisibility(View.GONE);
+        resultTextView.setVisibility(View.GONE);
 
         setupClickListeners();
         setupObservers();
@@ -205,7 +206,7 @@ public class HomeFragment extends Fragment {
             if (url.isEmpty()) {
                 Toast.makeText(
                     getContext(),
-                    "Silakan masukkan URL",
+                    "Make sure URL is not empty",
                     Toast.LENGTH_SHORT
                 ).show();
                 return;
@@ -214,6 +215,7 @@ public class HomeFragment extends Fragment {
             layoutAudioPlayer.setVisibility(View.GONE);
             viewModel.releaseMediaPlayer();
             viewModel.convertYoutubeUrl(url);
+            resultTextView.setVisibility(View.VISIBLE);
         });
 
         buttonDownload.setOnClickListener(v -> {
@@ -222,7 +224,7 @@ public class HomeFragment extends Fragment {
             if (link != null && !link.isEmpty()) {
                 Toast.makeText(
                     getContext(),
-                    "Mulai mengunduh: " + title,
+                    "Downloading: " + title,
                     Toast.LENGTH_SHORT
                 ).show();
                 downloadID = viewModel.downloadAudio(link, title);
@@ -230,7 +232,7 @@ public class HomeFragment extends Fragment {
             } else {
                 Toast.makeText(
                     getContext(),
-                    "Link download tidak valid.",
+                    "Failed to download.",
                     Toast.LENGTH_SHORT
                 ).show();
             }
@@ -244,9 +246,11 @@ public class HomeFragment extends Fragment {
                         "Librosa"
                 };
 
-                new android.app.AlertDialog.Builder(getContext())
-                        .setTitle("Pilih Mode Deteksi Chord")
-                        .setItems(options, (dialog, which) -> {
+                DialogHelper.showSelectionDialog(
+                        requireContext(),
+                        "Pilih Mode Deteksi Chord",
+                        options,
+                        (dialog, which) -> {
                             boolean isPremium = (which == 1);
 
                             if (isPremium) {
@@ -258,11 +262,11 @@ public class HomeFragment extends Fragment {
 
                             // Jika gratis atau sudah bayar premium, jalankan analisis
                             viewModel.analyzeChords(path, viewModel.getAudioTitle(), isPremium);
-                        })
-                        .show();
+                        }
+                );
 
             } else {
-                Toast.makeText(getContext(), "Pilih atau unduh file audio terlebih dahulu.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), "Select Audio File First!", Toast.LENGTH_SHORT).show();
             }
         });
 
@@ -295,29 +299,28 @@ public class HomeFragment extends Fragment {
             List<ChordTimestamp> currentChords = viewModel.getDetectedChords().getValue();
 
             if (currentChords != null && !currentChords.isEmpty()) {
-                String[] options = {"Export sebagai PDF", "Export sebagai TXT", "Export sebagai MIDI"};
+                String[] options = {"PDF", "TXT", "MIDI"};
 
                 new android.app.AlertDialog.Builder(getContext())
-                        .setTitle("Pilih Format")
+                        .setTitle("Select Export Format")
                         .setItems(options, (dialog, which) -> {
                             if (which == 0) {
                                 exportToFile(currentChords, viewModel.getAudioTitle(), true); // PDF
                             } else if (which == 1) {
                                 exportToFile(currentChords, viewModel.getAudioTitle(), false); // TXT
                             } else if (which == 2) {
-                                // Panggil MidiExportHelper untuk MIDI
                                 File midiFile = MidiExportHelper.exportChordsToMidi(requireContext(), currentChords, "MIDI_" + viewModel.getAudioTitle().replaceAll("[\\\\/:*?\"<>|]", "_"));
 
                                 if (midiFile != null) {
-                                    Toast.makeText(getContext(), "Berhasil! File MIDI tersimpan di folder Music", Toast.LENGTH_LONG).show();
+                                    Toast.makeText(getContext(), "Done! Midi File saved to: " + midiFile.getAbsolutePath(), Toast.LENGTH_LONG).show();
                                 } else {
-                                    Toast.makeText(getContext(), "Gagal membuat file MIDI", Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(getContext(), "Failed to save MIDI file.", Toast.LENGTH_SHORT).show();
                                 }
                             }
                         })
                         .show();
             } else {
-                Toast.makeText(requireContext(), "Belum ada chord yang terdeteksi!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(requireContext(), "Oops... Chord Doesn't Exist", Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -335,11 +338,17 @@ public class HomeFragment extends Fragment {
         viewModel
             .getStatusText()
             .observe(getViewLifecycleOwner(), text -> {
-                if (text != null) {
+                if (text != null && !text.isEmpty()) {
                     resultTextView.setText(text);
+
                     if (text.equals("Analisis selesai.") || text.equals("Data dimuat dari History.")) {
                         buttonDetectPitch.setVisibility(View.GONE);
+                        resultTextView.setVisibility(View.GONE);
+                    } else {
+                        resultTextView.setVisibility(View.VISIBLE);
                     }
+                } else {
+                    resultTextView.setVisibility(View.GONE);
                 }
             });
 

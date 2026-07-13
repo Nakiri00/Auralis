@@ -55,6 +55,17 @@ public class DialogHelper {
                 .show();
     }
 
+    public static void showSelectionDialog(Context context,
+                                           String title,
+                                           String[] options,
+                                           android.content.DialogInterface.OnClickListener onOptionSelected) {
+        new MaterialAlertDialogBuilder(context, R.style.App_AlertDialog)
+                .setTitle(title)
+                .setItems(options, onOptionSelected)
+                .setNegativeButton("Batal", null) // Tombol batal standar agar seragam
+                .show();
+    }
+
     /**
      * Simple info dialog with a single dismiss button.
      * Use this for success messages, warnings, or non-critical errors.

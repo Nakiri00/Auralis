@@ -1,33 +1,33 @@
 <resources>
-    <string name="app_name">Music Chords</string>
-    <string name="menu_home">Home</string>
-    <string name="menu_library">Library</string>
-    <string name="menu_history">History</string>
+<!--    <string name="app_name">Music Chords</string>-->
+<!--    <string name="menu_home">Home</string>-->
+<!--    <string name="menu_library">Library</string>-->
+<!--    <string name="menu_history">History</string>-->
 
-    <string name="title_music_chords">Music Chords</string>
-    <string name="hint_youtube_url">Enter YouTube URL</string>
-    <string name="btn_convert_url">Convert URL</string>
-    <string name="btn_pick_local_file">Select Local File</string>
-    <string name="status_ready_process">Ready to process audio</string>
-    <string name="btn_download_audio">Download Audio</string>
-    <string name="btn_analyze_detect">Analyze &amp; Detect Chords</string>
-    <string name="exportChord">Export Chord</string>
+<!--    <string name="title_music_chords">Music Chords</string>-->
+<!--    <string name="hint_youtube_url">Enter YouTube URL</string>-->
+<!--    <string name="btn_convert_url">Convert URL</string>-->
+<!--    <string name="btn_pick_local_file">Select Local File</string>-->
+<!--    <string name="status_ready_process">Ready to process audio</string>-->
+<!--    <string name="btn_download_audio">Download Audio</string>-->
+<!--    <string name="btn_analyze_detect">Analyze &amp; Detect Chords</string>-->
+<!--    <string name="exportChord">Export Chord</string>-->
 
-    <string name="placeholder_song_title">Song Title</string>
-    <string name="text_up_next">Up Next:</string>
+<!--    <string name="placeholder_song_title">Song Title</string>-->
+<!--    <string name="text_up_next">Up Next:</string>-->
 
-    <string name="cd_play">Play</string>
-    <string name="cd_pause">Pause</string>
+<!--    <string name="cd_play">Play</string>-->
+<!--    <string name="cd_pause">Pause</string>-->
 
-    <string name="title_library">Chord Library</string>
+<!--    <string name="title_library">Chord Library</string>-->
 
-    <string name="hint_search_history">Search history...</string>
-    <string name="text_sort_by">Sort by:</string>
-    <string name="chip_sort_newest">Newest</string>
-    <string name="chip_sort_title_az">Title A-Z</string>
-    <string name="text_empty_history">No history yet</string>
-    <string name="btn_prev_page">&lt; Prev</string>
-    <string name="btn_next_page">Next &gt;</string>
-    <string name="placeholder_page">1 / 1</string>
-    <string name="show_result">Show Result</string>
+<!--    <string name="hint_search_history">Search history...</string>-->
+<!--    <string name="text_sort_by">Sort by:</string>-->
+<!--    <string name="chip_sort_newest">Newest</string>-->
+<!--    <string name="chip_sort_title_az">Title A-Z</string>-->
+<!--    <string name="text_empty_history">No history yet</string>-->
+<!--    <string name="btn_prev_page">&lt; Prev</string>-->
+<!--    <string name="btn_next_page">Next &gt;</string>-->
+<!--    <string name="placeholder_page">1 / 1</string>-->
+<!--    <string name="show_result">Show Result</string>-->
 </resources>
