@@ -5,6 +5,7 @@
     <item
         android:id="@+id/action_change_language"
         android:title="ID"
+        android:visible="false"
         app:showAsAction="always" />
 
 </menu>
