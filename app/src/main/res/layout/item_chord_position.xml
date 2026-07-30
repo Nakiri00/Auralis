@@ -23,7 +23,7 @@
     />
 
     <!-- Diagram fretboard -->
-    <com.example.musicchords.ChordView
+    <com.nakiri00.auralis.ChordView
         android:id="@+id/cv_position_diagram"
         android:layout_width="110dp"
         android:layout_height="130dp"

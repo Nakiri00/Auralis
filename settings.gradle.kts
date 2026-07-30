@@ -24,6 +24,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MusicChords"
+rootProject.name = "Auralis"
 include(":app")
  

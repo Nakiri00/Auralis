@@ -11,11 +11,11 @@ val localProperties = Properties().apply {
 }
 
 android {
-    namespace = "com.example.musicchords"
+    namespace = "com.nakiri00.auralis"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.musicchords"
+        applicationId = "com.nakiri00.auralis"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
@@ -30,7 +30,7 @@ android {
         buildConfigField(
             "String",
             "Public_IP",
-            "\"${localProperties.getProperty("Public_IP", "https://10.0.2.2:8000")}\""
+            "\"${localProperties.getProperty("PublicIP_URL", "https://10.0.2.2:8000")}\""
         )
     }
 
@@ -52,6 +52,14 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    applicationVariants.all {
+        val variant = this
+        variant.outputs.map { it as com.android.build.gradle.internal.api.ApkVariantOutputImpl }.forEach { output ->
+            val newName = "Auralis-${variant.name}-${variant.versionName}.apk"
+            output.outputFileName = newName
+        }
     }
 }
 

@@ -33,12 +33,12 @@
 <!--</resources>-->
 
 <resources>
-    <string name="app_name">Music Chords</string>
+    <string name="app_name">Auralis</string>
     <string name="menu_home">Home</string>
     <string name="menu_library">Library</string>
     <string name="menu_history">History</string>
 
-    <string name="title_music_chords">Music Chords</string>
+    <string name="title_music_chords">Auralis</string>
     <string name="hint_youtube_url">Enter YouTube URL</string>
     <string name="btn_convert_url">Convert URL</string>
     <string name="btn_pick_local_file">Select Local File</string>
@@ -46,6 +46,17 @@
     <string name="btn_download_audio">Download Audio</string>
     <string name="btn_analyze_detect">Analyze &amp; Detect Chords</string>
     <string name="exportChord">Export Chord</string>
+    <string name="toast_enter_url">Make Sure YouTube URL Isn\'t Empty</string>
+    <string name="toast_download_start">Downloading %s...</string>
+    <string name="toast_invalid_download_link">Invalid Download Link</string>
+    <string name="toast_download_failed">Download Failed</string>
+    <string name="toast_choose_audio_first">Make Sure To Choose an Audio File First</string>
+    <string name="toast_midi_success">Done! MIDI File Saved to \n %s</string>
+    <string name="toast_midi_failed">Failed to Save MIDI File</string>
+    <string name="toast_no_chord_detected">Oops... Chord Doesnt Exist</string>
+    <string name="export_header">Chord Analysis for %s</string>
+    <string name="export_no_chord">No Chord Detected</string>
+    <string name="export_footer">Thank you for using Music Chords!</string>
 
     <string name="placeholder_song_title">Song Title</string>
     <string name="text_up_next">Up Next:</string>
@@ -64,4 +75,8 @@
     <string name="btn_next_page">Next &gt;</string>
     <string name="placeholder_page">1 / 1</string>
     <string name="show_result">Show Result</string>
+    <string name="toast_history_audio_not_found">Audio file not found</string>
+    <string name="dialog_title_delete_history">Delete History</string>
+    <string name="dialog_message_delete_history">Are you sure you want to delete %s?</string>
+    <string name="btn_delete">Delete</string>
 </resources>

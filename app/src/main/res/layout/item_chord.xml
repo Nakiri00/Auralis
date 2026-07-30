@@ -14,7 +14,7 @@
         android:padding="16dp"
         android:gravity="center_vertical">
 
-        <com.example.musicchords.ChordView
+        <com.nakiri00.auralis.ChordView
             android:id="@+id/cv_chord_diagram"
             android:layout_width="80dp"
             android:layout_height="110dp"
