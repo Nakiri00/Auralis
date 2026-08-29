@@ -91,7 +91,14 @@ public class HistoryRepository {
 
     // ─── Save / Update (dipakai oleh HomeViewModel) ─────────────────────────
 
-    public void saveOrUpdateHistory(String title, String path, String resultText, OnSaveListener listener) {
+    public void saveOrUpdateHistory(
+            String title,
+            String path,
+            String resultText,
+            List<ChordTimestamp> chords,
+            int keyIndex,
+            OnSaveListener listener
+    ) {
         String uid = FirebaseAuth.getInstance().getUid();
         if (uid == null) {
             if (listener != null) listener.onError(new Exception("User not authenticated"));
@@ -112,11 +119,24 @@ public class HistoryRepository {
             if (!task.getResult().isEmpty()) {
                 DocumentSnapshot doc = task.getResult().getDocuments().get(0);
                 historyRef.document(doc.getId())
-                        .update("timestamp", new Timestamp(new Date()), "result", resultText, "filePath", path)
+                        .update(
+                                "timestamp", new Timestamp(new Date()),
+                                "result", resultText,
+                                "filePath", path,
+                                "chords", chords,
+                                "keyIndex", keyIndex
+                        )
                         .addOnSuccessListener(aVoid -> { if (listener != null) listener.onSuccess(true); })
                         .addOnFailureListener(e -> { if (listener != null) listener.onError(e); });
             } else {
-                historyRef.add(new ChordHistory(title, path, resultText, new Timestamp(new Date())))
+                historyRef.add(new ChordHistory(
+                                title,
+                                path,
+                                resultText,
+                                chords,
+                                keyIndex,
+                                new Timestamp(new Date())
+                        ))
                         .addOnSuccessListener(ref -> { if (listener != null) listener.onSuccess(false); })
                         .addOnFailureListener(e -> { if (listener != null) listener.onError(e); });
             }

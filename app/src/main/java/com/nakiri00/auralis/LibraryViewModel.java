@@ -16,12 +16,12 @@ public class LibraryViewModel extends AndroidViewModel {
     private final LibraryRepository repository = new LibraryRepository();
 
     private final MutableLiveData<List<ChordGroup>> chordGroups =
-        new MutableLiveData<>();
+            new MutableLiveData<>();
     private final MutableLiveData<Boolean> isLoading = new MutableLiveData<>(
-        false
+            false
     );
     private final MutableLiveData<String> toastMessage = new MutableLiveData<>(
-        null
+            null
     );
 
     private MediaPlayer mediaPlayer;
@@ -53,12 +53,12 @@ public class LibraryViewModel extends AndroidViewModel {
 
         new Thread(() -> {
             List<ChordGroup> loaded = repository.loadChordGroupsFromAssets(
-                getApplication()
+                    getApplication()
             );
             chordGroups.postValue(loaded);
             isLoading.postValue(false);
         })
-            .start();
+                .start();
     }
 
     /**
@@ -68,15 +68,15 @@ public class LibraryViewModel extends AndroidViewModel {
     public void playAudio(ChordGroup group) {
         if (group.getAudioResId() == 0) {
             toastMessage.postValue(
-                "Suara belum tersedia untuk " + group.getChordName()
+                    "Suara belum tersedia untuk " + group.getChordName()
             );
             return;
         }
         releaseMediaPlayer();
         try {
             mediaPlayer = MediaPlayer.create(
-                getApplication(),
-                group.getAudioResId()
+                    getApplication(),
+                    group.getAudioResId()
             );
             if (mediaPlayer != null) {
                 mediaPlayer.setOnCompletionListener(mp -> releaseMediaPlayer());

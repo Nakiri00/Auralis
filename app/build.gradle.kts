@@ -24,11 +24,6 @@ android {
 
         buildConfigField(
             "String",
-            "RAPIDAPI_KEY",
-            "\"${localProperties.getProperty("RAPIDAPI_KEY", "")}\""
-        )
-        buildConfigField(
-            "String",
             "Public_IP",
             "\"${localProperties.getProperty("PublicIP_URL", "https://10.0.2.2:8000")}\""
         )

@@ -22,10 +22,14 @@ import java.io.OutputStream;
 
 import java.io.File;
 import java.util.List;
+import java.util.regex.Pattern;
 
 public class MidiExportHelper {
 
     private static final String TAG = "MidiExportHelper";
+    private static final Pattern DISPLAY_ANNOTATION = Pattern.compile(
+            "\\s+\\(.*\\)\\s*$"
+    );
 
     // Method utama untuk memanggil export
     public static File exportChordsToMidi(Context context, List<ChordTimestamp> detectedChords, String fileName) {
@@ -146,9 +150,17 @@ public class MidiExportHelper {
     }
 
     // Method pemetaan Chord String -> MIDI Notes (C4 = 60)
-    private static int[] getMidiNotesForChord(String chordName) {
+    static int[] getMidiNotesForChord(String chordName) {
+        if (chordName == null) return new int[0];
+
+        // Roman numerals are display metadata, not part of the chord quality.
+        // Example: "A Minor (vi)" must still be parsed as an A minor triad.
+        String musicalChordName = DISPLAY_ANNOTATION
+                .matcher(chordName.trim())
+                .replaceFirst("");
+
         // Normalisasi enharmonic (Ab→G#, Eb→D#, dll)
-        String normalized = chordName
+        String normalized = musicalChordName
                 .replace("Ab", "G#").replace("Eb", "D#")
                 .replace("Bb", "A#").replace("Db", "C#").replace("Gb", "F#");
 
@@ -167,7 +179,7 @@ public class MidiExportHelper {
         }
 
         // Tentukan kualitas chord dari suffix setelah root
-        String suffix = normalized.substring(rootStr.length());
+        String suffix = normalized.substring(rootStr.length()).trim();
 
         if (suffix.equals("5")) {
             // Power chord: Root + 5th only
@@ -189,12 +201,12 @@ public class MidiExportHelper {
             // Sus2: Root + Major 2nd + 5th
             return new int[]{rootMidi, rootMidi + 2, rootMidi + 7};
 
-        } else if (suffix.equals(" Minor")) {
+        } else if (suffix.equals("Minor")) {
             // Minor triad
             return new int[]{rootMidi, rootMidi + 3, rootMidi + 7};
 
         } else {
-            // Default: Major triad (termasuk " Major" dan kasus tidak dikenal)
+            // Default: Major triad (termasuk "Major" dan kasus tidak dikenal)
             return new int[]{rootMidi, rootMidi + 4, rootMidi + 7};
         }
     }

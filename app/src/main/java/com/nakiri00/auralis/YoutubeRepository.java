@@ -14,8 +14,8 @@ import okhttp3.Response;
 public class YoutubeRepository {
 
     private static final String TAG = "YoutubeRepository";
-    private static final String RAPIDAPI_KEY = BuildConfig.RAPIDAPI_KEY;
-    private static final String RAPIDAPI_HOST = "youtube-mp36.p.rapidapi.com";
+    private static final String CONVERT_URL =
+            BuildConfig.Public_IP + "/youtube/convert";
 
     // Singleton client — thread pool dan connection pool dipakai ulang, tidak bocor
     private static final OkHttpClient CLIENT = new OkHttpClient();
@@ -32,14 +32,11 @@ public class YoutubeRepository {
             return;
         }
 
-        Request request = new Request.Builder()
-                .url("https://" + RAPIDAPI_HOST + "/dl?id=" + videoId)
-                .get()
-                .addHeader("x-rapidapi-key", RAPIDAPI_KEY)
-                .addHeader("x-rapidapi-host", RAPIDAPI_HOST)
-                .build();
+        Request.Builder requestBuilder = new Request.Builder()
+                .url(CONVERT_URL + "?video_id=" + videoId)
+                .get();
 
-        CLIENT.newCall(request).enqueue(new Callback() {
+        BackendApiClient.enqueueAuthenticated(CLIENT, requestBuilder, new Callback() {
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
                 Log.e(TAG, "API Call Failed", e);
@@ -58,6 +55,9 @@ public class YoutubeRepository {
                     }
                 }
             }
+        }, error -> {
+            Log.e(TAG, "Firebase authentication failed", error);
+            callback.onError("Authentication failed. Please reopen the app.");
         });
     }
 

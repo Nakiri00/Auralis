@@ -137,30 +137,24 @@ public class KeyDetector {
     }
 
     /**
-    * Mengonversi nama chord ke notasi Roman numeral dalam konteks key terdeteksi.
-    * Contoh: key C Major, chord "F Major" → "IV"
-    * Contoh: key A Minor, chord "E Major" → "V (harmonic)"
-    */
+     * Mengonversi nama chord ke notasi Roman numeral dalam konteks key terdeteksi.
+     * Contoh: key C Major, chord "F Major" → "IV"
+     * Contoh: key A Minor, chord "E Major" → "V (harmonic)"
+     */
     public static String toRomanNumeral(int keyIndex, String chordName) {
         boolean keyIsMinor = keyIndex >= 12;
         int keyRoot = keyIsMinor ? keyIndex - 12 : keyIndex;
+        String normalizedChord = PitchClassNormalizer.normalizeChordName(chordName);
 
-        // Tentukan root chord dari nama
-        int chordRoot = -1;
-        for (int i = 0; i < ChordTemplates.NOTES.length; i++) {
-            if (chordName.startsWith(ChordTemplates.NOTES[i])) {
-                if (chordRoot == -1 || ChordTemplates.NOTES[i].length() > ChordTemplates.NOTES[chordRoot].length()) {
-                    chordRoot = i;
-                }
-            }
-        }
+        // Resolve the root by pitch class so D#/Eb, G#/Ab, and A#/Bb are equal.
+        int chordRoot = PitchClassNormalizer.getPitchClassIndex(normalizedChord);
         if (chordRoot == -1) return "?";
 
         int interval = (chordRoot - keyRoot + 12) % 12;
-        boolean chordIsMajor = chordName.contains(" Major") || chordName.endsWith("7")
-                            || chordName.endsWith("5") || chordName.endsWith("sus4")
-                            || chordName.endsWith("sus2");
-        boolean chordIsMinor = chordName.contains(" Minor") || chordName.endsWith("m7");
+        boolean chordIsMajor = normalizedChord.contains(" Major") || normalizedChord.endsWith("7")
+                || normalizedChord.endsWith("5") || normalizedChord.endsWith("sus4")
+                || normalizedChord.endsWith("sus2");
+        boolean chordIsMinor = normalizedChord.contains(" Minor") || normalizedChord.endsWith("m7");
 
         // Tabel Roman numeral berdasarkan interval dalam tangga nada
         String[] majorRomans = {"I", "ii°", "II", "iii°", "III", "IV", "iv°", "V", "vi°", "VI", "vii°", "VII"};
@@ -174,11 +168,11 @@ public class KeyDetector {
         else if (chordIsMinor) base = base.toLowerCase().replace("°", "");
 
         // Tambahkan suffix untuk 7th, sus, dll
-        if (chordName.endsWith("7"))    base += "7";
-        else if (chordName.endsWith("m7"))  base += "7";
-        else if (chordName.endsWith("sus4")) base += "sus4";
-        else if (chordName.endsWith("sus2")) base += "sus2";
-        else if (chordName.endsWith("5"))    base += "5";
+        if (normalizedChord.endsWith("7"))    base += "7";
+        else if (normalizedChord.endsWith("m7"))  base += "7";
+        else if (normalizedChord.endsWith("sus4")) base += "sus4";
+        else if (normalizedChord.endsWith("sus2")) base += "sus2";
+        else if (normalizedChord.endsWith("5"))    base += "5";
 
         return base;
     }

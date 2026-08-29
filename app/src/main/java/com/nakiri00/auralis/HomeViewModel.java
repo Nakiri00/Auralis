@@ -32,54 +32,54 @@ public class HomeViewModel extends AndroidViewModel {
     // Repositories
     private final YoutubeRepository youtubeRepository = new YoutubeRepository();
     private final AudioAnalysisRepository analysisRepository =
-        new AudioAnalysisRepository();
+            new AudioAnalysisRepository();
     private final HistoryRepository historyRepository = new HistoryRepository();
 
     // LiveData — YouTube conversion
     private final MutableLiveData<Boolean> isLoading = new MutableLiveData<>(
-        false
+            false
     );
     private final MutableLiveData<String> downloadLink = new MutableLiveData<>(
-        null
+            null
     );
 
     // LiveData — Status text (drives resultTextView)
     private final MutableLiveData<String> statusText = new MutableLiveData<>(
-        ""
+            ""
     );
 
     // LiveData — Toast message (one-shot)
     private final MutableLiveData<String> toastMessage = new MutableLiveData<>(
-        null
+            null
     );
 
     // LiveData — Analysis
     private final MutableLiveData<Boolean> isAnalyzing = new MutableLiveData<>(
-        false
+            false
     );
 
     // LiveData — Player
     private final MutableLiveData<String> playerTitle = new MutableLiveData<>(
-        ""
+            ""
     );
     private final MutableLiveData<Boolean> playerReady = new MutableLiveData<>(
-        false
+            false
     );
     private final MutableLiveData<Boolean> isPlaying = new MutableLiveData<>(
-        false
+            false
     );
     private final MutableLiveData<Integer> playerDuration =
-        new MutableLiveData<>(0);
+            new MutableLiveData<>(0);
     private final MutableLiveData<Integer> playerPosition =
-        new MutableLiveData<>(0);
+            new MutableLiveData<>(0);
     private final MutableLiveData<String> currentChordDisplay =
-        new MutableLiveData<>("-");
+            new MutableLiveData<>("-");
     private final MutableLiveData<String> detectedKeyText    = new MutableLiveData<>("");
     private final MutableLiveData<String> capoSuggestionText = new MutableLiveData<>("");
 
     // LiveData — File state
     private final MutableLiveData<Boolean> fileLoaded = new MutableLiveData<>(
-        false
+            false
     );
     private final MutableLiveData<Integer> chordProgress = new MutableLiveData<>(0);
 
@@ -255,21 +255,21 @@ public class HomeViewModel extends AndroidViewModel {
         statusText.postValue("Memproses...");
 
         youtubeRepository.convertYoutubeUrl(
-            url,
-            new YoutubeRepository.ConversionCallback() {
-                @Override
-                public void onSuccess(String responseJson) {
-                    isLoading.postValue(false);
-                    parseYoutubeResponse(responseJson);
-                }
+                url,
+                new YoutubeRepository.ConversionCallback() {
+                    @Override
+                    public void onSuccess(String responseJson) {
+                        isLoading.postValue(false);
+                        parseYoutubeResponse(responseJson);
+                    }
 
-                @Override
-                public void onError(String errorMessage) {
-                    isLoading.postValue(false);
-                    toastMessage.postValue(errorMessage);
-                    statusText.postValue("Error: " + errorMessage);
+                    @Override
+                    public void onError(String errorMessage) {
+                        isLoading.postValue(false);
+                        toastMessage.postValue(errorMessage);
+                        statusText.postValue("Error: " + errorMessage);
+                    }
                 }
-            }
         );
     }
 
@@ -277,28 +277,28 @@ public class HomeViewModel extends AndroidViewModel {
         try {
             JsonObject json = new Gson().fromJson(response, JsonObject.class);
             String status = json.has("status")
-                ? json.get("status").getAsString()
-                : "error";
+                    ? json.get("status").getAsString()
+                    : "error";
             if ("ok".equalsIgnoreCase(status) && json.has("link")) {
                 audioTitle = json.has("title")
-                    ? json.get("title").getAsString()
-                    : "audio";
+                        ? json.get("title").getAsString()
+                        : "audio";
                 downloadLink.postValue(json.get("link").getAsString());
                 statusText.postValue(audioTitle);
             } else if ("processing".equalsIgnoreCase(status)) {
                 statusText.postValue(
-                    "Processing Audio, please wait..."
+                        "Processing Audio, please wait..."
                 );
             } else {
                 String msg = json.has("mess")
-                    ? json.get("mess").getAsString()
-                    : "Response Format Invalid";
+                        ? json.get("mess").getAsString()
+                        : "Response Format Invalid";
                 statusText.postValue("Gagal: " + msg);
             }
         } catch (JsonSyntaxException e) {
             Log.e(TAG, "JSON Parsing Error", e);
             statusText.postValue(
-                "Something Bad Happen, please try again."
+                    "Something Bad Happen, please try again."
             );
         }
     }
@@ -311,21 +311,21 @@ public class HomeViewModel extends AndroidViewModel {
     public long downloadAudio(String url, String title) {
         String safeName = title.replaceAll("[\\\\/:*?\"<>|]", "_");
         DownloadManager.Request request = new DownloadManager.Request(
-            Uri.parse(url)
+                Uri.parse(url)
         );
         request.setTitle(title);
         request.setDescription("Mengunduh Audio MP3");
         request.setNotificationVisibility(
-            DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+                DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
         );
         request.setDestinationInExternalPublicDir(
-            Environment.DIRECTORY_DOWNLOADS,
-            safeName + ".mp3"
+                Environment.DIRECTORY_DOWNLOADS,
+                safeName + ".mp3"
         );
         DownloadManager dm =
-            (DownloadManager) getApplication().getSystemService(
-                Context.DOWNLOAD_SERVICE
-            );
+                (DownloadManager) getApplication().getSystemService(
+                        Context.DOWNLOAD_SERVICE
+                );
         return dm.enqueue(request);
     }
 
@@ -336,22 +336,22 @@ public class HomeViewModel extends AndroidViewModel {
                 Context ctx = getApplication().getApplicationContext();
                 String fileName = getFileNameFromUri(ctx, uri);
                 if (fileName == null) fileName =
-                    "audio_" + System.currentTimeMillis() + ".mp3";
+                        "audio_" + System.currentTimeMillis() + ".mp3";
 
                 String safeFileName = fileName.replaceAll(
-                    "[\\\\/:*?\"<>|]",
-                    "_"
+                        "[\\\\/:*?\"<>|]",
+                        "_"
                 );
                 File destFile = new File(
-                    ctx.getFilesDir(),
-                    "history_" + safeFileName
+                        ctx.getFilesDir(),
+                        "history_" + safeFileName
                 );
 
                 try (
-                    InputStream in = ctx
-                        .getContentResolver()
-                        .openInputStream(uri);
-                    FileOutputStream out = new FileOutputStream(destFile)
+                        InputStream in = ctx
+                                .getContentResolver()
+                                .openInputStream(uri);
+                        FileOutputStream out = new FileOutputStream(destFile)
                 ) {
                     byte[] buf = new byte[8 * 1024];
                     int len;
@@ -359,9 +359,9 @@ public class HomeViewModel extends AndroidViewModel {
                 }
 
                 String resolvedTitle = (customTitle != null &&
-                    !customTitle.isEmpty())
-                    ? customTitle
-                    : fileName;
+                        !customTitle.isEmpty())
+                        ? customTitle
+                        : fileName;
                 handler.post(() -> {
                     audioFilePath = destFile.getAbsolutePath();
                     audioTitle = resolvedTitle;
@@ -379,22 +379,22 @@ public class HomeViewModel extends AndroidViewModel {
             } catch (Exception e) {
                 Log.e(TAG, "Error processing file", e);
                 handler.post(() ->
-                    toastMessage.setValue(
-                        "Gagal memproses file: " + e.getMessage()
-                    )
+                        toastMessage.setValue(
+                                "Gagal memproses file: " + e.getMessage()
+                        )
                 );
             }
         })
-            .start();
+                .start();
     }
 
     private String getFileNameFromUri(Context ctx, Uri uri) {
         String result = null;
         if ("content".equals(uri.getScheme())) {
             try (
-                Cursor c = ctx
-                    .getContentResolver()
-                    .query(uri, null, null, null, null)
+                    Cursor c = ctx
+                            .getContentResolver()
+                            .query(uri, null, null, null, null)
             ) {
                 if (c != null && c.moveToFirst()) {
                     int idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
@@ -429,15 +429,15 @@ public class HomeViewModel extends AndroidViewModel {
                 isPlaying.postValue(false);
                 playerPosition.postValue(0);
                 if (seekBarRunnable != null) handler.removeCallbacks(
-                    seekBarRunnable
+                        seekBarRunnable
                 );
                 stopChordSync();
             });
 
             mediaPlayer.setOnErrorListener((mp, what, extra) -> {
                 Log.e(
-                    TAG,
-                    "MediaPlayer error: what=" + what + " extra=" + extra
+                        TAG,
+                        "MediaPlayer error: what=" + what + " extra=" + extra
                 );
                 releaseMediaPlayer();
                 toastMessage.postValue("Gagal memuat audio");
@@ -488,7 +488,7 @@ public class HomeViewModel extends AndroidViewModel {
             mediaPlayer.pause();
             isPlaying.postValue(false);
             if (seekBarRunnable != null) handler.removeCallbacks(
-                seekBarRunnable
+                    seekBarRunnable
             );
             stopChordSync();
         }
@@ -560,7 +560,7 @@ public class HomeViewModel extends AndroidViewModel {
         String result = "-";
         for (ChordTimestamp item : detectedChords) {
             if (currentTime >= item.getTimeSeconds()) result =
-                item.getChordName();
+                    item.getChordName();
             else break;
         }
         return result;
@@ -620,6 +620,10 @@ public class HomeViewModel extends AndroidViewModel {
     }
 
     private void executeAnalysis(String fileToAnalyze, String title, String originalAudioPath, boolean isPremiumUser) {
+        String historyAudioPath = originalAudioPath != null && !originalAudioPath.isEmpty()
+                ? originalAudioPath
+                : fileToAnalyze;
+
         analysisRepository.analyze(fileToAnalyze, isPremiumUser, new AudioAnalysisRepository.AnalysisCallback() {
             @Override
             public void onComplete(List<ChordTimestamp> results, int keyIndex) {
@@ -651,6 +655,7 @@ public class HomeViewModel extends AndroidViewModel {
                 }
 
                 setDetectedChords(new ArrayList<>(detectedChords));
+                cleanupTemporaryAnalysisFile(fileToAnalyze, historyAudioPath);
 
                 handler.post(() -> {
                     isAnalyzing.setValue(false);
@@ -659,7 +664,7 @@ public class HomeViewModel extends AndroidViewModel {
                     detectedKeyText.setValue("Key: " + keyName);
                     capoSuggestionText.setValue(capoAdvice);
 
-                    historyRepository.saveOrUpdateHistory(title, fileToAnalyze, sb.toString(),
+                    historyRepository.saveOrUpdateHistory(title, historyAudioPath, sb.toString(),
                             new HistoryRepository.OnSaveListener() {
                                 @Override public void onSuccess(boolean isUpdate) { Log.d(TAG, "History saved"); }
                                 @Override public void onError(Exception e)        { Log.e(TAG, "Failed to save history", e); }
@@ -670,6 +675,7 @@ public class HomeViewModel extends AndroidViewModel {
             @Override
             public void onError(Exception e) {
                 Log.e(TAG, "Analysis error", e);
+                cleanupTemporaryAnalysisFile(fileToAnalyze, historyAudioPath);
                 handler.post(() -> {
                     isAnalyzing.setValue(false);
                     toastMessage.setValue("Failed To Analyze: " + e.getMessage());
@@ -679,11 +685,34 @@ public class HomeViewModel extends AndroidViewModel {
         });
     }
 
+    private void cleanupTemporaryAnalysisFile(String fileToAnalyze, String historyAudioPath) {
+        if (fileToAnalyze == null || fileToAnalyze.isEmpty()) return;
+
+        try {
+            File analysisFile = new File(fileToAnalyze);
+            String analysisPath = analysisFile.getCanonicalPath();
+
+            if (historyAudioPath != null && !historyAudioPath.isEmpty()) {
+                String historyPath = new File(historyAudioPath).getCanonicalPath();
+                if (analysisPath.equals(historyPath)) return;
+            }
+
+            File cacheDir = getApplication().getApplicationContext().getCacheDir();
+            String cachePath = cacheDir.getCanonicalPath() + File.separator;
+
+            if (analysisPath.startsWith(cachePath) && analysisFile.exists() && !analysisFile.delete()) {
+                Log.w(TAG, "Failed to delete temporary analysis file: " + analysisPath);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to clean up temporary analysis file", e);
+        }
+    }
+
     // ─── Load History ───────────────────────────────────────────────────────
     public void loadHistoryData(
-        String audioPath,
-        String title,
-        String savedChordData
+            String audioPath,
+            String title,
+            String savedChordData
     ) {
         audioFilePath = audioPath;
         audioTitle = title != null ? title : "";

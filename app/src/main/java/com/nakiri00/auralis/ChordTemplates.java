@@ -5,9 +5,7 @@ import java.util.Map;
 
 public class ChordTemplates {
 
-    public static final String[] NOTES = {
-            "C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B",
-    };
+    public static final String[] NOTES = PitchClassNormalizer.getCanonicalNotes();
 
     // Chord tone weights
     private static final float ROOT_WEIGHT       = 1.00f;
