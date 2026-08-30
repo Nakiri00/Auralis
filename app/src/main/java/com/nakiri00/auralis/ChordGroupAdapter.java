@@ -5,72 +5,128 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.TextView;
+
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class ChordGroupAdapter
-    extends RecyclerView.Adapter<ChordGroupAdapter.GroupViewHolder>
-{
-
+        extends RecyclerView.Adapter<
+        ChordGroupAdapter.GroupViewHolder> {
 
     public interface OnPlayListener {
         void onPlay(ChordGroup group);
     }
 
-    private final List<ChordGroup> groups = new ArrayList<>();
+    private final List<ChordGroup> groups =
+            new ArrayList<>();
+
     private OnPlayListener playListener;
 
-    public void setOnPlayListener(OnPlayListener l) {
-        this.playListener = l;
+    public void setOnPlayListener(
+            OnPlayListener listener
+    ) {
+        this.playListener = listener;
     }
 
-    public void updateData(List<ChordGroup> newGroups) {
+    public void updateData(
+            List<ChordGroup> newGroups
+    ) {
         groups.clear();
-        groups.addAll(newGroups);
+
+        if (newGroups != null) {
+            groups.addAll(newGroups);
+        }
+
         notifyDataSetChanged();
     }
 
     @NonNull
     @Override
     public GroupViewHolder onCreateViewHolder(
-        @NonNull ViewGroup parent,
-        int viewType
+            @NonNull ViewGroup parent,
+            int viewType
     ) {
-        View v = LayoutInflater.from(parent.getContext()).inflate(
-            R.layout.item_chord_group,
-            parent,
-            false
-        );
-        return new GroupViewHolder(v);
+        View view =
+                LayoutInflater
+                        .from(parent.getContext())
+                        .inflate(
+                                R.layout.item_chord_group,
+                                parent,
+                                false
+                        );
+
+        return new GroupViewHolder(view);
     }
 
     @Override
     public void onBindViewHolder(
-        @NonNull GroupViewHolder holder,
-        int position
+            @NonNull GroupViewHolder holder,
+            int position
     ) {
         ChordGroup group = groups.get(position);
 
-        // Header
-        holder.tvChordName.setText(group.getChordName());
-        holder.btnPlay.setOnClickListener(v -> {
-            if (playListener != null) playListener.onPlay(group);
-        });
+        holder.tvChordName.setText(
+                group.getChordName()
+        );
+
+        List<String> positions =
+                group.getPositions() != null
+                        ? group.getPositions()
+                        : Collections.emptyList();
+
+        List<Integer> baseFrets =
+                group.getBaseFrets() != null
+                        ? group.getBaseFrets()
+                        : Collections.emptyList();
+
+        /*
+         * Tombol sekarang ditentukan berdasarkan ketersediaan
+         * posisi fingering, bukan berdasarkan resource res/raw.
+         */
+        boolean canPlay = !positions.isEmpty();
 
         holder.btnPlay.setVisibility(
-            group.getAudioResId() != 0 ? View.VISIBLE : View.GONE
+                canPlay ? View.VISIBLE : View.GONE
         );
 
-        PositionAdapter positionAdapter = new PositionAdapter(
-                group.getPositions(),
-                group.getBaseFrets()
+        holder.btnPlay.setEnabled(canPlay);
+
+        if (canPlay) {
+            holder.btnPlay.setOnClickListener(view -> {
+                if (playListener != null) {
+                    playListener.onPlay(group);
+                }
+            });
+        } else {
+            holder.btnPlay.setOnClickListener(null);
+        }
+
+        PositionAdapter positionAdapter =
+                new PositionAdapter(
+                        positions,
+                        baseFrets
+                );
+
+        holder.rvPositions.setLayoutManager(
+                new LinearLayoutManager(
+                        holder.itemView.getContext(),
+                        LinearLayoutManager.HORIZONTAL,
+                        false
+                )
         );
-        holder.rvPositions.setLayoutManager(new LinearLayoutManager(holder.itemView.getContext(), LinearLayoutManager.HORIZONTAL, false));
-        holder.rvPositions.setAdapter(positionAdapter);
-        holder.rvPositions.setNestedScrollingEnabled(false);
+
+        holder.rvPositions.setAdapter(
+                positionAdapter
+        );
+
+        holder.rvPositions.setNestedScrollingEnabled(
+                false
+        );
     }
 
     @Override
@@ -78,47 +134,92 @@ public class ChordGroupAdapter
         return groups.size();
     }
 
+    static class GroupViewHolder
+            extends RecyclerView.ViewHolder {
 
-    static class GroupViewHolder extends RecyclerView.ViewHolder {
+        final TextView tvChordName;
+        final ImageButton btnPlay;
+        final RecyclerView rvPositions;
 
-        TextView tvChordName;
-        ImageButton btnPlay;
-        RecyclerView rvPositions;
-
-        GroupViewHolder(@NonNull View itemView) {
+        GroupViewHolder(
+                @NonNull View itemView
+        ) {
             super(itemView);
-            tvChordName = itemView.findViewById(R.id.tv_chord_group_name);
-            btnPlay = itemView.findViewById(R.id.btn_play_chord);
-            rvPositions = itemView.findViewById(R.id.rv_chord_positions);
+
+            tvChordName =
+                    itemView.findViewById(
+                            R.id.tv_chord_group_name
+                    );
+
+            btnPlay =
+                    itemView.findViewById(
+                            R.id.btn_play_chord
+                    );
+
+            rvPositions =
+                    itemView.findViewById(
+                            R.id.rv_chord_positions
+                    );
         }
     }
 
-    static class PositionAdapter extends RecyclerView.Adapter<PositionAdapter.PosViewHolder> {
+    static class PositionAdapter
+            extends RecyclerView.Adapter<
+            PositionAdapter.PositionViewHolder> {
 
         private final List<String> fretStrings;
         private final List<Integer> baseFrets;
 
-        PositionAdapter(List<String> fretStrings, List<Integer> baseFrets) {
+        PositionAdapter(
+                List<String> fretStrings,
+                List<Integer> baseFrets
+        ) {
             this.fretStrings = fretStrings;
             this.baseFrets = baseFrets;
         }
 
         @NonNull
         @Override
-        public PosViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_chord_position, parent, false);
-            return new PosViewHolder(v);
+        public PositionViewHolder onCreateViewHolder(
+                @NonNull ViewGroup parent,
+                int viewType
+        ) {
+            View view =
+                    LayoutInflater
+                            .from(parent.getContext())
+                            .inflate(
+                                    R.layout.item_chord_position,
+                                    parent,
+                                    false
+                            );
+
+            return new PositionViewHolder(view);
         }
 
         @Override
-        public void onBindViewHolder(@NonNull PosViewHolder holder, int pos) {
-            String fretStr = fretStrings.get(pos);
-            int currentBaseFret = baseFrets.get(pos);
+        public void onBindViewHolder(
+                @NonNull PositionViewHolder holder,
+                int position
+        ) {
+            String fretString =
+                    fretStrings.get(position);
 
-            holder.tvLabel.setText("Fret " + currentBaseFret);
+            int currentBaseFret =
+                    position < baseFrets.size()
+                            ? baseFrets.get(position)
+                            : 1;
 
-            holder.chordView.setChordPositions(fretStr);
-            holder.tvFretString.setText(fretStr.replace("-1", "X"));
+            holder.tvLabel.setText(
+                    "Fret " + currentBaseFret
+            );
+
+            holder.chordView.setChordPositions(
+                    fretString
+            );
+
+            holder.tvFretString.setText(
+                    fretString.replace("-1", "X")
+            );
         }
 
         @Override
@@ -126,17 +227,32 @@ public class ChordGroupAdapter
             return fretStrings.size();
         }
 
-        static class PosViewHolder extends RecyclerView.ViewHolder {
+        static class PositionViewHolder
+                extends RecyclerView.ViewHolder {
 
-            TextView tvLabel;
-            ChordView chordView;
-            TextView tvFretString;
+            final TextView tvLabel;
+            final ChordView chordView;
+            final TextView tvFretString;
 
-            PosViewHolder(@NonNull View itemView) {
+            PositionViewHolder(
+                    @NonNull View itemView
+            ) {
                 super(itemView);
-                tvLabel = itemView.findViewById(R.id.tv_position_label);
-                chordView = itemView.findViewById(R.id.cv_position_diagram);
-                tvFretString = itemView.findViewById(R.id.tv_position_frets);
+
+                tvLabel =
+                        itemView.findViewById(
+                                R.id.tv_position_label
+                        );
+
+                chordView =
+                        itemView.findViewById(
+                                R.id.cv_position_diagram
+                        );
+
+                tvFretString =
+                        itemView.findViewById(
+                                R.id.tv_position_frets
+                        );
             }
         }
     }

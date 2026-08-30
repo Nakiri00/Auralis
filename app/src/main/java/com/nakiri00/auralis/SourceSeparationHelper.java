@@ -38,46 +38,94 @@ public class SourceSeparationHelper {
                 .readTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
                 .build();
 
-        RequestBody fileBody = RequestBody.create(MediaType.parse("audio/*"), originalFile);
+        RequestBody fileBody =
+                BackendApiClient.createAudioRequestBody(originalFile);
+
         RequestBody requestBody = new MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("file", originalFile.getName(), fileBody)
                 .build();
 
-        Request request = new Request.Builder()
+        Request.Builder requestBuilder = new Request.Builder()
                 .url(Public_Ip)
-                .post(requestBody)
-                .build();
+                .post(requestBody);
 
-        client.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(Call call, IOException e) {
-                Log.e(TAG, "API call gagal", e);
-                callback.onError(e);
-            }
-
-            @Override
-            public void onResponse(Call call, Response response) throws IOException {
-                if (!response.isSuccessful()) {
-                    callback.onError(new Exception("Server error: " + response.code()));
-                    return;
-                }
-
-                File separatedFile = new File(context.getCacheDir(), "separated_" + System.currentTimeMillis() + ".mp3");
-                try (InputStream is = response.body().byteStream();
-                     FileOutputStream fos = new FileOutputStream(separatedFile)) {
-
-                    byte[] buffer = new byte[8192];
-                    int bytesRead;
-                    while ((bytesRead = is.read(buffer)) != -1) {
-                        fos.write(buffer, 0, bytesRead);
+        BackendApiClient.enqueueAuthenticated(
+                client,
+                requestBuilder,
+                new Callback() {
+                    @Override
+                    public void onFailure(Call call, IOException e) {
+                        Log.e(TAG, "API call gagal", e);
+                        callback.onError(e);
                     }
 
-                    callback.onSuccess(separatedFile.getAbsolutePath());
-                } catch (Exception e) {
-                    callback.onError(e);
+                    @Override
+                    public void onResponse(
+                            Call call,
+                            Response response
+                    ) throws IOException {
+                        try (Response r = response) {
+                            if (!r.isSuccessful()) {
+                                callback.onError(
+                                        new Exception(
+                                                "Server error: " + r.code()
+                                        )
+                                );
+                                return;
+                            }
+
+                            if (r.body() == null) {
+                                callback.onError(
+                                        new Exception(
+                                                "Server returned an empty audio response."
+                                        )
+                                );
+                                return;
+                            }
+
+                            File separatedFile = new File(
+                                    context.getCacheDir(),
+                                    "separated_"
+                                            + System.currentTimeMillis()
+                                            + ".mp3"
+                            );
+
+                            try (
+                                    InputStream is = r.body().byteStream();
+                                    FileOutputStream fos =
+                                            new FileOutputStream(separatedFile)
+                            ) {
+                                byte[] buffer = new byte[8192];
+                                int bytesRead;
+
+                                while ((bytesRead = is.read(buffer)) != -1) {
+                                    fos.write(buffer, 0, bytesRead);
+                                }
+
+                                callback.onSuccess(
+                                        separatedFile.getAbsolutePath()
+                                );
+                            } catch (Exception e) {
+                                callback.onError(e);
+                            }
+                        }
+                    }
+                },
+                error -> {
+                    Log.e(
+                            TAG,
+                            "Firebase authentication failed",
+                            error
+                    );
+
+                    callback.onError(
+                            new Exception(
+                                    "Authentication failed. Please reopen the app.",
+                                    error
+                            )
+                    );
                 }
-            }
-        });
+        );
     }
 }

@@ -35,63 +35,166 @@ public class LibrosaAnalyzer implements ChordAnalyzerStrategy {
                 .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
                 .build();
 
-        RequestBody fileBody = RequestBody.create(MediaType.parse("audio/*"), audioFile);
+        RequestBody fileBody =
+                BackendApiClient.createAudioRequestBody(audioFile);
+
         RequestBody requestBody = new MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("file", audioFile.getName(), fileBody)
                 .build();
 
         try {
-            Request request = new Request.Builder()
+            Request.Builder requestBuilder = new Request.Builder()
                     .url(Public_Ip)
-                    .post(requestBody)
-                    .build();
+                    .post(requestBody);
 
-            client.newCall(request).enqueue(new Callback() {
-                @Override
-                public void onFailure(Call call, IOException e) {
-                    Log.e(TAG, "Gagal menghubungi server Librosa", e);
-                    callback.onError(new Exception("Connection to Librosa Server failed."));
-                }
+            BackendApiClient.enqueueAuthenticated(
+                    client,
+                    requestBuilder,
+                    new Callback() {
+                        @Override
+                        public void onFailure(
+                                Call call,
+                                IOException e
+                        ) {
+                            Log.e(
+                                    TAG,
+                                    "Gagal menghubungi server Librosa",
+                                    e
+                            );
 
-                @Override
-                public void onResponse(Call call, Response response) throws IOException {
-                    if (!response.isSuccessful()) {
-                        callback.onError(new Exception("Server error: " + response.code()));
-                        return;
-                    }
-
-                    try {
-                        String responseBody = response.body().string();
-                        JSONObject jsonResponse = new JSONObject(responseBody);
-                        String status = jsonResponse.optString("status");
-
-                        if ("success".equals(status)) {
-                            // Ekstrak Key Index dan Data Chord dari respons JSON Python
-                            int keyIndex = jsonResponse.optInt("key_index", -1);
-                            JSONArray dataArray = jsonResponse.getJSONArray("data");
-                            List<ChordTimestamp> chords = new ArrayList<>();
-
-                            for (int i = 0; i < dataArray.length(); i++) {
-                                JSONObject obj = dataArray.getJSONObject(i);
-                                double time = obj.getDouble("time");
-                                String chordName = obj.getString("chord");
-                                chords.add(new ChordTimestamp(time, chordName));
-                            }
-
-                            callback.onComplete(chords, keyIndex);
-                        } else {
-                            callback.onError(new Exception(jsonResponse.optString("message")));
+                            callback.onError(
+                                    new Exception(
+                                            "Connection to Librosa Server failed.",
+                                            e
+                                    )
+                            );
                         }
-                    } catch (Exception e) {
-                        Log.e(TAG, "Gagal parsing JSON dari server", e);
-                        callback.onError(new Exception("Data format from server not recognized."));
+
+                        @Override
+                        public void onResponse(
+                                Call call,
+                                Response response
+                        ) throws IOException {
+                            try (Response r = response) {
+                                if (!r.isSuccessful()) {
+                                    callback.onError(
+                                            new Exception(
+                                                    "Server error: " + r.code()
+                                            )
+                                    );
+                                    return;
+                                }
+
+                                if (r.body() == null) {
+                                    callback.onError(
+                                            new Exception(
+                                                    "Server returned an empty response."
+                                            )
+                                    );
+                                    return;
+                                }
+
+                                try {
+                                    String responseBody =
+                                            r.body().string();
+
+                                    JSONObject jsonResponse =
+                                            new JSONObject(responseBody);
+
+                                    String status =
+                                            jsonResponse.optString("status");
+
+                                    if ("success".equals(status)) {
+                                        int keyIndex =
+                                                jsonResponse.optInt(
+                                                        "key_index",
+                                                        -1
+                                                );
+
+                                        JSONArray dataArray =
+                                                jsonResponse.getJSONArray("data");
+
+                                        List<ChordTimestamp> chords =
+                                                new ArrayList<>();
+
+                                        for (
+                                                int i = 0;
+                                                i < dataArray.length();
+                                                i++
+                                        ) {
+                                            JSONObject obj =
+                                                    dataArray.getJSONObject(i);
+
+                                            double time =
+                                                    obj.getDouble("time");
+
+                                            String chordName =
+                                                    obj.getString("chord");
+
+                                            chords.add(
+                                                    new ChordTimestamp(
+                                                            time,
+                                                            chordName
+                                                    )
+                                            );
+                                        }
+
+                                        callback.onComplete(
+                                                chords,
+                                                keyIndex
+                                        );
+                                    } else {
+                                        callback.onError(
+                                                new Exception(
+                                                        jsonResponse.optString(
+                                                                "message",
+                                                                "Chord analysis failed."
+                                                        )
+                                                )
+                                        );
+                                    }
+                                } catch (Exception e) {
+                                    Log.e(
+                                            TAG,
+                                            "Gagal parsing JSON dari server",
+                                            e
+                                    );
+
+                                    callback.onError(
+                                            new Exception(
+                                                    "Data format from server not recognized.",
+                                                    e
+                                            )
+                                    );
+                                }
+                            }
+                        }
+                    },
+                    error -> {
+                        Log.e(
+                                TAG,
+                                "Firebase authentication failed",
+                                error
+                        );
+
+                        callback.onError(
+                                new Exception(
+                                        "Authentication failed. Please reopen the app.",
+                                        error
+                                )
+                        );
                     }
-                }
-            });
+            );
         } catch (IllegalArgumentException | NullPointerException e) {
             Log.e(TAG, "URL API tidak valid: " + Public_Ip, e);
-            callback.onError(new Exception("Invalid server URL configuration."));
+
+            callback.onError(
+                    new Exception(
+                            "Invalid server URL configuration.",
+                            e
+                    )
+            );
         }
     }
 }

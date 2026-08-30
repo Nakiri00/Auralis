@@ -664,7 +664,7 @@ public class HomeViewModel extends AndroidViewModel {
                     detectedKeyText.setValue("Key: " + keyName);
                     capoSuggestionText.setValue(capoAdvice);
 
-                    historyRepository.saveOrUpdateHistory(title, historyAudioPath, sb.toString(),
+                    historyRepository.saveOrUpdateHistory(title, historyAudioPath, sb.toString(), new ArrayList<>(detectedChords), keyIndex,
                             new HistoryRepository.OnSaveListener() {
                                 @Override public void onSuccess(boolean isUpdate) { Log.d(TAG, "History saved"); }
                                 @Override public void onError(Exception e)        { Log.e(TAG, "Failed to save history", e); }

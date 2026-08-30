@@ -60,12 +60,12 @@ public class LibraryRepository {
 
             String[] targetKeys = {
                 "C",
-                "C#",
+                "Csharp",
                 "D",
                 "Eb",
                 "E",
                 "F",
-                "F#",
+                "Fsharp",
                 "G",
                 "Ab",
                 "A",
