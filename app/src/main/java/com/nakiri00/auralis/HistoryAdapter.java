@@ -5,26 +5,32 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageButton;
 import android.widget.TextView;
+
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
+
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 public class HistoryAdapter
-    extends RecyclerView.Adapter<HistoryAdapter.ViewHolder>
-{
+        extends RecyclerView.Adapter<
+        HistoryAdapter.ViewHolder
+        > {
 
-    private final List<ChordHistory> list = new ArrayList<>();
-    private final List<String> documentIds = new ArrayList<>();
-    private final SimpleDateFormat sdf = new SimpleDateFormat(
-        "dd MMM yyyy, HH:mm",
-        Locale.getDefault()
-    );
+    private final List<ChordHistory> items =
+            new ArrayList<>();
 
-    private OnItemClickListener listener;
+    private final SimpleDateFormat dateFormat =
+            new SimpleDateFormat(
+                    "dd MMM yyyy, HH:mm",
+                    Locale.getDefault()
+            );
+
+    private OnItemClickListener itemClickListener;
     private OnDeleteListener deleteListener;
 
     public interface OnItemClickListener {
@@ -32,125 +38,197 @@ public class HistoryAdapter
     }
 
     public interface OnDeleteListener {
-        void onDeleteClick(
-            String documentId,
-            String filePath,
-            ChordHistory item
-        );
+        void onDeleteClick(ChordHistory item);
     }
 
-    public void setOnItemClickListener(OnItemClickListener l) {
-        this.listener = l;
-    }
-
-    public void setOnDeleteListener(OnDeleteListener l) {
-        this.deleteListener = l;
-    }
-
-    /** Dipanggil dari Fragment setiap kali LiveData uiState berubah */
-    public void updateData(
-        List<ChordHistory> newItems,
-        List<String> newDocIds
+    public void setOnItemClickListener(
+            OnItemClickListener listener
     ) {
-        final List<ChordHistory> oldList = new ArrayList<>(list);
-        final List<String> oldIds = new ArrayList<>(documentIds);
+        this.itemClickListener = listener;
+    }
 
-        DiffUtil.DiffResult diffResult = DiffUtil.calculateDiff(
-            new DiffUtil.Callback() {
-                @Override
-                public int getOldListSize() {
-                    return oldList.size();
-                }
+    public void setOnDeleteListener(
+            OnDeleteListener listener
+    ) {
+        this.deleteListener = listener;
+    }
 
-                @Override
-                public int getNewListSize() {
-                    return newItems.size();
-                }
+    public void updateData(
+            List<ChordHistory> newItems
+    ) {
+        List<ChordHistory> safeNewItems =
+                newItems != null
+                        ? new ArrayList<>(newItems)
+                        : new ArrayList<>();
 
-                @Override
-                public boolean areItemsTheSame(int oldPos, int newPos) {
-                    return oldIds.get(oldPos).equals(newDocIds.get(newPos));
-                }
+        List<ChordHistory> oldItems =
+                new ArrayList<>(items);
 
-                @Override
-                public boolean areContentsTheSame(int oldPos, int newPos) {
-                    ChordHistory o = oldList.get(oldPos);
-                    ChordHistory n = newItems.get(newPos);
-                    return (
-                        o.getTitle() != null &&
-                        o.getTitle().equals(n.getTitle()) &&
-                        o.getTimestamp() != null &&
-                        o.getTimestamp().equals(n.getTimestamp())
-                    );
-                }
-            }
-        );
+        DiffUtil.DiffResult difference =
+                DiffUtil.calculateDiff(
+                        new DiffUtil.Callback() {
+                            @Override
+                            public int getOldListSize() {
+                                return oldItems.size();
+                            }
 
-        list.clear();
-        list.addAll(newItems);
-        documentIds.clear();
-        documentIds.addAll(newDocIds);
-        diffResult.dispatchUpdatesTo(this);
+                            @Override
+                            public int getNewListSize() {
+                                return safeNewItems.size();
+                            }
+
+                            @Override
+                            public boolean areItemsTheSame(
+                                    int oldPosition,
+                                    int newPosition
+                            ) {
+                                return Objects.equals(
+                                        oldItems
+                                                .get(oldPosition)
+                                                .getHistoryId(),
+                                        safeNewItems
+                                                .get(newPosition)
+                                                .getHistoryId()
+                                );
+                            }
+
+                            @Override
+                            public boolean areContentsTheSame(
+                                    int oldPosition,
+                                    int newPosition
+                            ) {
+                                ChordHistory oldItem =
+                                        oldItems.get(
+                                                oldPosition
+                                        );
+
+                                ChordHistory newItem =
+                                        safeNewItems.get(
+                                                newPosition
+                                        );
+
+                                return Objects.equals(
+                                        oldItem.getTitle(),
+                                        newItem.getTitle()
+                                ) && Objects.equals(
+                                        oldItem.getFilePath(),
+                                        newItem.getFilePath()
+                                ) && Objects.equals(
+                                        oldItem.getResult(),
+                                        newItem.getResult()
+                                ) && Objects.equals(
+                                        oldItem.getKeyIndex(),
+                                        newItem.getKeyIndex()
+                                ) && Objects.equals(
+                                        oldItem.getTimestamp(),
+                                        newItem.getTimestamp()
+                                );
+                            }
+                        }
+                );
+
+        items.clear();
+        items.addAll(safeNewItems);
+
+        difference.dispatchUpdatesTo(this);
     }
 
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(
-        @NonNull ViewGroup parent,
-        int viewType
+            @NonNull ViewGroup parent,
+            int viewType
     ) {
-        View v = LayoutInflater.from(parent.getContext()).inflate(
-            R.layout.item_history_card,
-            parent,
-            false
-        );
-        return new ViewHolder(v);
+        View view =
+                LayoutInflater
+                        .from(parent.getContext())
+                        .inflate(
+                                R.layout.item_history_card,
+                                parent,
+                                false
+                        );
+
+        return new ViewHolder(view);
     }
 
     @Override
-    public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-        ChordHistory item = list.get(position);
-        String docId = documentIds.get(position);
-        String textShowResult = holder.itemView.getContext().getString(R.string.show_result);
-        holder.tvShowResult.setText(textShowResult);
+    public void onBindViewHolder(
+            @NonNull ViewHolder holder,
+            int position
+    ) {
+        ChordHistory item =
+                items.get(position);
 
-        holder.tvTitle.setText(
-            item.getTitle() != null ? item.getTitle() : "Tanpa Judul"
-        );
-        holder.tvDate.setText(
-            item.getTimestamp() != null
-                ? sdf.format(item.getTimestamp().toDate())
-                : "-"
+        holder.showResult.setText(
+                holder.itemView
+                        .getContext()
+                        .getString(
+                                R.string.show_result
+                        )
         );
 
-        holder.itemView.setOnClickListener(v -> {
-            if (listener != null) listener.onItemClick(item);
+        holder.title.setText(
+                item.getTitle() != null
+                        && !item.getTitle().trim().isEmpty()
+                        ? item.getTitle()
+                        : "Tanpa Judul"
+        );
+
+        holder.date.setText(
+                item.getTimestamp() != null
+                        ? dateFormat.format(
+                        item.getTimestamp()
+                                .toDate()
+                )
+                        : "-"
+        );
+
+        holder.itemView.setOnClickListener(view -> {
+            if (itemClickListener != null) {
+                itemClickListener.onItemClick(item);
+            }
         });
-        holder.btnDelete.setOnClickListener(v -> {
-            if (deleteListener != null) deleteListener.onDeleteClick(
-                docId,
-                item.getFilePath(),
-                item
-            );
+
+        holder.deleteButton.setOnClickListener(view -> {
+            if (deleteListener != null) {
+                deleteListener.onDeleteClick(item);
+            }
         });
     }
 
     @Override
     public int getItemCount() {
-        return list.size();
+        return items.size();
     }
 
-    static class ViewHolder extends RecyclerView.ViewHolder {
+    static class ViewHolder
+            extends RecyclerView.ViewHolder {
 
-        TextView tvTitle, tvDate, tvShowResult;
-        ImageButton btnDelete;
+        final TextView title;
+        final TextView date;
+        final TextView showResult;
+        final ImageButton deleteButton;
 
-        public ViewHolder(@NonNull View itemView) {
+        ViewHolder(
+                @NonNull View itemView
+        ) {
             super(itemView);
-            tvTitle = itemView.findViewById(R.id.tv_history_title);
-            tvDate = itemView.findViewById(R.id.tv_history_date);
-            btnDelete = itemView.findViewById(R.id.btn_delete_history);
-            tvShowResult = itemView.findViewById(R.id.tv_show_result);
+
+            title = itemView.findViewById(
+                    R.id.tv_history_title
+            );
+
+            date = itemView.findViewById(
+                    R.id.tv_history_date
+            );
+
+            showResult = itemView.findViewById(
+                    R.id.tv_show_result
+            );
+
+            deleteButton = itemView.findViewById(
+                    R.id.btn_delete_history
+            );
         }
     }
 }

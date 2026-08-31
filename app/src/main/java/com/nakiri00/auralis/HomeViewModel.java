@@ -20,45 +20,35 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 public class HomeViewModel extends AndroidViewModel {
 
     private static final String TAG = "HomeViewModel";
-
-    // Repositories
     private final YoutubeRepository youtubeRepository = new YoutubeRepository();
     private final AudioAnalysisRepository analysisRepository =
             new AudioAnalysisRepository();
     private final HistoryRepository historyRepository = new HistoryRepository();
-
-    // LiveData — YouTube conversion
     private final MutableLiveData<Boolean> isLoading = new MutableLiveData<>(
             false
     );
     private final MutableLiveData<String> downloadLink = new MutableLiveData<>(
             null
     );
-
-    // LiveData — Status text (drives resultTextView)
     private final MutableLiveData<String> statusText = new MutableLiveData<>(
             ""
     );
-
-    // LiveData — Toast message (one-shot)
     private final MutableLiveData<String> toastMessage = new MutableLiveData<>(
             null
     );
-
-    // LiveData — Analysis
     private final MutableLiveData<Boolean> isAnalyzing = new MutableLiveData<>(
             false
     );
-
-    // LiveData — Player
     private final MutableLiveData<String> playerTitle = new MutableLiveData<>(
             ""
     );
@@ -76,8 +66,6 @@ public class HomeViewModel extends AndroidViewModel {
             new MutableLiveData<>("-");
     private final MutableLiveData<String> detectedKeyText    = new MutableLiveData<>("");
     private final MutableLiveData<String> capoSuggestionText = new MutableLiveData<>("");
-
-    // LiveData — File state
     private final MutableLiveData<Boolean> fileLoaded = new MutableLiveData<>(
             false
     );
@@ -91,26 +79,26 @@ public class HomeViewModel extends AndroidViewModel {
     public LiveData<List<String>> getUpcomingChords() {
         return upcomingChords;
     }
-
-    // Internal state
     private String audioTitle = "";
     private String audioFilePath = null;
+    private String currentHistoryId;
     private final List<ChordTimestamp> detectedChords = new ArrayList<>();
     private final MutableLiveData<List<ChordTimestamp>> detectedChordsList = new MutableLiveData<>(new ArrayList<>());
-
-
-    // MediaPlayer & Handlers
     private MediaPlayer mediaPlayer;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private Runnable seekBarRunnable;
     private final Handler chordHandler = new Handler(Looper.getMainLooper());
     private Runnable chordRunnable;
+    private final AtomicLong analysisOperationId =
+            new AtomicLong(0);
+
+    private volatile SourceSeparationHelper activeSeparator;
+    private volatile String activeTemporaryAnalysisPath;
+    private volatile String activeHistoryAudioPath;
 
     public HomeViewModel(@NonNull Application application) {
         super(application);
     }
-
-    // ─── Getters LiveData ───────────────────────────────────────────────────
     public LiveData<Boolean> getIsLoading() {
         return isLoading;
     }
@@ -172,6 +160,9 @@ public class HomeViewModel extends AndroidViewModel {
     }
     public LiveData<String> getDetectedKeyText()    { return detectedKeyText; }
     public LiveData<String> getCapoSuggestionText() { return capoSuggestionText; }
+    public String getCurrentHistoryId() {
+        return currentHistoryId;
+    }
 
 
 //    private List<ChordTimestamp> postProcess(List<ChordTimestamp> raw) {
@@ -332,41 +323,58 @@ public class HomeViewModel extends AndroidViewModel {
     // ─── File Processing ────────────────────────────────────────────────────
     public void processAudioFile(Uri uri, String customTitle) {
         new Thread(() -> {
+            File destination = null;
+
             try {
-                Context ctx = getApplication().getApplicationContext();
-                String fileName = getFileNameFromUri(ctx, uri);
-                if (fileName == null) fileName =
-                        "audio_" + System.currentTimeMillis() + ".mp3";
+                Context context = getApplication().getApplicationContext();
+                String originalFileName = getFileNameFromUri(context, uri);
 
-                String safeFileName = fileName.replaceAll(
-                        "[\\\\/:*?\"<>|]",
-                        "_"
-                );
-                File destFile = new File(
-                        ctx.getFilesDir(),
-                        "history_" + safeFileName
-                );
-
-                try (
-                        InputStream in = ctx
-                                .getContentResolver()
-                                .openInputStream(uri);
-                        FileOutputStream out = new FileOutputStream(destFile)
-                ) {
-                    byte[] buf = new byte[8 * 1024];
-                    int len;
-                    while ((len = in.read(buf)) > 0) out.write(buf, 0, len);
+                if (originalFileName == null || originalFileName.trim().isEmpty()) {
+                    originalFileName = "audio_" + System.currentTimeMillis() + ".mp3";
                 }
 
-                String resolvedTitle = (customTitle != null &&
-                        !customTitle.isEmpty())
-                        ? customTitle
-                        : fileName;
+                String historyId = HistoryIdentity.newId();
+                String extension = resolveAudioExtension(originalFileName);
+                destination = HistoryAudioStorage.createDestination(context, historyId, originalFileName);
+
+                InputStream openedInput = context.getContentResolver().openInputStream(uri);
+                if (openedInput == null) {
+                    throw new IOException("Unable to open selected audio");
+                }
+
+                // Gunakan try-with-resources untuk otomatis menutup stream
+                try (InputStream input = openedInput;
+                     FileOutputStream output = new FileOutputStream(destination)) {
+
+                    byte[] buffer = new byte[8 * 1024];
+                    int bytesRead;
+                    long totalBytes = 0;
+
+                    while ((bytesRead = input.read(buffer)) != -1) {
+                        output.write(buffer, 0, bytesRead);
+                        totalBytes += bytesRead;
+                    }
+
+                    if (totalBytes == 0) {
+                        throw new IOException("Selected audio is empty");
+                    }
+                }
+
+                String resolvedTitle = (customTitle != null && !customTitle.trim().isEmpty())
+                        ? customTitle.trim()
+                        : originalFileName;
+
+                File storedFile = destination;
+
+                // Update UI/State di Main Thread
                 handler.post(() -> {
-                    audioFilePath = destFile.getAbsolutePath();
+                    currentHistoryId = historyId;
+                    audioFilePath = destination.getAbsolutePath();
                     audioTitle = resolvedTitle;
+
                     detectedChords.clear();
                     setDetectedChords(new ArrayList<>());
+
                     upcomingChords.setValue(new ArrayList<>());
                     currentChordDisplay.setValue("-");
                     detectedKeyText.setValue("");
@@ -374,20 +382,55 @@ public class HomeViewModel extends AndroidViewModel {
                     chordProgress.setValue(0);
                     statusText.setValue(resolvedTitle);
                     fileLoaded.setValue(true);
+
                     setupAudioPlayer(audioFilePath, audioTitle);
                 });
-            } catch (Exception e) {
-                Log.e(TAG, "Error processing file", e);
+
+            } catch (Exception error) {
+                Log.e(TAG, "Error processing file", error);
+
+                // Cleanup: Hapus file jika proses gagal di tengah jalan
+                if (destination != null && destination.exists() && !destination.delete()) {
+                    Log.w(TAG, "Failed to delete incomplete file");
+                }
+
                 handler.post(() ->
-                        toastMessage.setValue(
-                                "Gagal memproses file: " + e.getMessage()
-                        )
+                        toastMessage.setValue("Gagal memproses file: " + error.getMessage())
                 );
             }
-        })
-                .start();
+        }, "auralis-file-import").start();
     }
+    private String resolveAudioExtension(
+            String fileName
+    ) {
+        if (fileName == null) {
+            return ".mp3";
+        }
 
+        String lower =
+                fileName.toLowerCase(
+                        java.util.Locale.US
+                );
+
+        String[] supportedExtensions = {
+                ".mp3",
+                ".wav",
+                ".flac",
+                ".m4a",
+                ".aac",
+                ".ogg",
+                ".mp4"
+        };
+
+        for (String extension
+                : supportedExtensions) {
+            if (lower.endsWith(extension)) {
+                return extension;
+            }
+        }
+
+        return ".mp3";
+    }
     private String getFileNameFromUri(Context ctx, Uri uri) {
         String result = null;
         if ("content".equals(uri.getScheme())) {
@@ -579,11 +622,23 @@ public class HomeViewModel extends AndroidViewModel {
     }
 
     // ─── Audio Analysis ─────────────────────────────────────────────────────
-    public void analyzeChords(String audioPath, String title, boolean isPremiumUser) {
-        if (Boolean.TRUE.equals(isAnalyzing.getValue())) return;
-        isAnalyzing.setValue(true);
+    public void analyzeChords(
+            String audioPath,
+            String title,
+            boolean isPremiumUser
+    ) {
+        if (Boolean.TRUE.equals(isAnalyzing.getValue())) {
+            return;
+        }
 
+        cancelActiveBackendRequests(false);
+
+        final long operationId =
+                analysisOperationId.incrementAndGet();
+
+        isAnalyzing.setValue(true);
         currentChordDisplay.setValue("Cleaning Audio...");
+
         detectedChords.clear();
         setDetectedChords(new ArrayList<>());
         upcomingChords.setValue(new ArrayList<>());
@@ -591,98 +646,407 @@ public class HomeViewModel extends AndroidViewModel {
         capoSuggestionText.setValue("");
         chordProgress.setValue(0);
 
-        Context context = getApplication().getApplicationContext();
-        SourceSeparationHelper separatorHelper = new SourceSeparationHelper();
+        Context context =
+                getApplication().getApplicationContext();
 
-        separatorHelper.separateAudio(context, audioPath, new SourceSeparationHelper.SeparationCallback() {
-            @Override
-            public void onSuccess(String separatedAudioPath) {
-                handler.post(() -> {
-                    String mode = isPremiumUser ? "Librosa" : "TarsosDSP";
-                    currentChordDisplay.setValue(mode + " is Running");
-                });
+        SourceSeparationHelper separator =
+                new SourceSeparationHelper();
 
-                executeAnalysis(separatedAudioPath, title, audioPath, isPremiumUser);
-            }
+        activeSeparator = separator;
 
-            @Override
-            public void onError(Exception e) {
-                Log.e("SeparatorDebug", "Server Spleeter Gagal, menggunakan file asli", e);
-                handler.post(() -> {
-                    toastMessage.setValue("Server Timed Out, Using Original Audio");
-                    String mode = isPremiumUser ? "Librosa" : "TarsosDSP";
-                    currentChordDisplay.setValue(mode + " is Running");
-                });
+        separator.separateAudio(
+                context,
+                audioPath,
+                new SourceSeparationHelper.SeparationCallback() {
+                    @Override
+                    public void onSuccess(
+                            String separatedAudioPath
+                    ) {
+                        if (!isCurrentAnalysis(operationId)) {
+                            cleanupTemporaryAnalysisFile(
+                                    separatedAudioPath,
+                                    audioPath
+                            );
+                            return;
+                        }
 
-                executeAnalysis(audioPath, title, audioPath, isPremiumUser);
-            }
-        });
+                        if (activeSeparator == separator) {
+                            activeSeparator = null;
+                        }
+
+                        handler.post(() -> {
+                            if (!isCurrentAnalysis(operationId)) {
+                                return;
+                            }
+
+                            String mode =
+                                    isPremiumUser
+                                            ? "Librosa"
+                                            : "TarsosDSP";
+
+                            currentChordDisplay.setValue(
+                                    mode + " is Running"
+                            );
+                        });
+
+                        executeAnalysis(
+                                separatedAudioPath,
+                                title,
+                                audioPath,
+                                isPremiumUser,
+                                operationId
+                        );
+                    }
+
+                    @Override
+                    public void onError(Exception e) {
+                        if (!isCurrentAnalysis(operationId)) {
+                            return;
+                        }
+
+                        if (activeSeparator == separator) {
+                            activeSeparator = null;
+                        }
+
+                        Log.e(
+                                TAG,
+                                "Server Spleeter gagal, "
+                                        + "menggunakan file asli",
+                                e
+                        );
+
+                        handler.post(() -> {
+                            if (!isCurrentAnalysis(operationId)) {
+                                return;
+                            }
+
+                            toastMessage.setValue(
+                                    "Separation failed, "
+                                            + "using original audio"
+                            );
+
+                            String mode =
+                                    isPremiumUser
+                                            ? "Librosa"
+                                            : "TarsosDSP";
+
+                            currentChordDisplay.setValue(
+                                    mode + " is Running"
+                            );
+                        });
+
+                        executeAnalysis(
+                                audioPath,
+                                title,
+                                audioPath,
+                                isPremiumUser,
+                                operationId
+                        );
+                    }
+                }
+        );
     }
 
-    private void executeAnalysis(String fileToAnalyze, String title, String originalAudioPath, boolean isPremiumUser) {
-        String historyAudioPath = originalAudioPath != null && !originalAudioPath.isEmpty()
-                ? originalAudioPath
-                : fileToAnalyze;
+    private void executeAnalysis(
+            String fileToAnalyze,
+            String title,
+            String originalAudioPath,
+            boolean isPremiumUser,
+            long operationId
+    ) {
+        if (!isCurrentAnalysis(operationId)) {
+            cleanupTemporaryAnalysisFile(
+                    fileToAnalyze,
+                    originalAudioPath
+            );
+            return;
+        }
 
-        analysisRepository.analyze(fileToAnalyze, isPremiumUser, new AudioAnalysisRepository.AnalysisCallback() {
-            @Override
-            public void onComplete(List<ChordTimestamp> results, int keyIndex) {
-                detectedChords.clear();
+        String historyAudioPath =
+                originalAudioPath != null
+                        && !originalAudioPath.isEmpty()
+                        ? originalAudioPath
+                        : fileToAnalyze;
 
-                String keyName    = KeyDetector.getKeyName(keyIndex);
-                String capoAdvice = CapoSuggester.suggest(keyIndex);
+        activeTemporaryAnalysisPath = fileToAnalyze;
+        activeHistoryAudioPath = historyAudioPath;
 
-                StringBuilder sb = new StringBuilder();
-                sb.append(title != null ? title : "Audio").append("\n");
+        analysisRepository.analyze(
+                fileToAnalyze,
+                isPremiumUser,
+                new AudioAnalysisRepository.AnalysisCallback() {
+                    @Override
+                    public void onComplete(
+                            List<ChordTimestamp> results,
+                            int keyIndex
+                    ) {
+                        if (!isCurrentAnalysis(operationId)) {
+                            cleanupTemporaryAnalysisFile(
+                                    fileToAnalyze,
+                                    historyAudioPath
+                            );
+                            return;
+                        }
 
-                sb.append("KEY: ").append(keyName).append("\n");
-                sb.append("CAPO: ").append(capoAdvice).append("\n");
-                // --------------------------------------------------
+                        boolean keyDetected =
+                                KeyDetector.isValidKeyIndex(
+                                        keyIndex
+                                );
 
-                for (ChordTimestamp item : results) {
-                    String name = item.getChordName();
-                    String roman = name.equals("-") || name.equals("N/A")
-                            ? ""
-                            : " (" + KeyDetector.toRomanNumeral(keyIndex, name) + ")";
+                        String keyName =
+                                keyDetected
+                                        ? KeyDetector.getKeyName(
+                                        keyIndex
+                                )
+                                        : "Not detected";
 
-                    String chordWithRoman = name + roman;
-                    detectedChords.add(new ChordTimestamp(item.getTimeSeconds(), chordWithRoman));
+                        String capoAdvice =
+                                keyDetected
+                                        ? CapoSuggester.suggest(
+                                        keyIndex
+                                )
+                                        : "Capo suggestion unavailable";
 
-                    sb.append(String.format(java.util.Locale.US, "[%02d:%02d] %s\n",
-                            (int)(item.getTimeSeconds() / 60),
-                            (int)(item.getTimeSeconds() % 60),
-                            chordWithRoman));
+                        List<ChordTimestamp> formattedChords =
+                                new ArrayList<>();
+
+                        StringBuilder text = new StringBuilder();
+
+                        text.append(
+                                title != null
+                                        ? title
+                                        : "Audio"
+                        ).append("\n");
+
+                        text.append("KEY: ")
+                                .append(keyName)
+                                .append("\n");
+
+                        text.append("CAPO: ")
+                                .append(capoAdvice)
+                                .append("\n");
+
+                        for (ChordTimestamp item : results) {
+                            String name = item.getChordName();
+
+                            String roman = "";
+
+                            if (
+                                    keyDetected
+                                            && !name.equals("-")
+                                            && !name.equals("N/A")
+                            ) {
+                                String romanValue =
+                                        KeyDetector.toRomanNumeral(
+                                                keyIndex,
+                                                name
+                                        );
+
+                                if (!romanValue.isEmpty()) {
+                                    roman =
+                                            " (" + romanValue + ")";
+                                }
+                            }
+
+                            String chordWithRoman =
+                                    name + roman;
+
+                            formattedChords.add(
+                                    new ChordTimestamp(
+                                            item.getTimeSeconds(),
+                                            chordWithRoman
+                                    )
+                            );
+
+                            text.append(
+                                    String.format(
+                                            java.util.Locale.US,
+                                            "[%02d:%02d] %s\n",
+                                            (int) (
+                                                    item.getTimeSeconds()
+                                                            / 60
+                                            ),
+                                            (int) (
+                                                    item.getTimeSeconds()
+                                                            % 60
+                                            ),
+                                            chordWithRoman
+                                    )
+                            );
+                        }
+
+                        cleanupTemporaryAnalysisFile(
+                                fileToAnalyze,
+                                historyAudioPath
+                        );
+
+                        activeTemporaryAnalysisPath = null;
+                        activeHistoryAudioPath = null;
+
+                        handler.post(() -> {
+                            if (!isCurrentAnalysis(operationId)) {
+                                return;
+                            }
+
+                            detectedChords.clear();
+                            detectedChords.addAll(
+                                    formattedChords
+                            );
+
+                            setDetectedChords(
+                                    new ArrayList<>(
+                                            formattedChords
+                                    )
+                            );
+
+                            isAnalyzing.setValue(false);
+
+                            currentChordDisplay.setValue(
+                                    results.isEmpty()
+                                            ? "No Chords Detected"
+                                            : "Chords Detected, Let's Play!"
+                            );
+
+                            statusText.setValue(
+                                    "Analisis selesai."
+                            );
+
+                            detectedKeyText.setValue(
+                                    "Key: " + keyName
+                            );
+
+                            capoSuggestionText.setValue(
+                                    keyDetected
+                                            ? capoAdvice
+                                            : ""
+                            );
+
+                            String historyId =
+                                    HistoryIdentity.normalizeOrCreate(
+                                            currentHistoryId
+                                    );
+
+                            currentHistoryId = historyId;
+
+                            historyRepository.saveOrUpdateHistory(
+                                    historyId,
+                                    title,
+                                    audioFileName,
+                                    sb.toString(),
+                                    new ArrayList<>(
+                                            detectedChords
+                                    ),
+                                    keyIndex,
+                                    new HistoryRepository.OnSaveListener() {
+                                        @Override
+                                        public void onSuccess(
+                                                boolean isUpdate
+                                        ) {
+                                            Log.d(
+                                                    TAG,
+                                                    isUpdate
+                                                            ? "History updated"
+                                                            : "History created"
+                                            );
+                                        }
+
+                                        @Override
+                                        public void onError(
+                                                Exception error
+                                        ) {
+                                            Log.e(
+                                                    TAG,
+                                                    "Failed to save history",
+                                                    error
+                                            );
+                                        }
+                                    }
+                            );
+                        });
+                    }
+
+                    @Override
+                    public void onError(Exception e) {
+                        if (!isCurrentAnalysis(operationId)) {
+                            cleanupTemporaryAnalysisFile(
+                                    fileToAnalyze,
+                                    historyAudioPath
+                            );
+                            return;
+                        }
+
+                        Log.e(TAG, "Analysis error", e);
+
+                        cleanupTemporaryAnalysisFile(
+                                fileToAnalyze,
+                                historyAudioPath
+                        );
+
+                        activeTemporaryAnalysisPath = null;
+                        activeHistoryAudioPath = null;
+
+                        handler.post(() -> {
+                            if (!isCurrentAnalysis(operationId)) {
+                                return;
+                            }
+
+                            isAnalyzing.setValue(false);
+
+                            toastMessage.setValue(
+                                    "Failed To Analyze: "
+                                            + e.getMessage()
+                            );
+
+                            currentChordDisplay.setValue("-");
+                        });
+                    }
                 }
+        );
+    }
 
-                setDetectedChords(new ArrayList<>(detectedChords));
-                cleanupTemporaryAnalysisFile(fileToAnalyze, historyAudioPath);
+    private boolean isCurrentAnalysis(long operationId) {
+        return analysisOperationId.get() == operationId;
+    }
 
-                handler.post(() -> {
-                    isAnalyzing.setValue(false);
-                    currentChordDisplay.setValue(results.isEmpty() ? "No Chords Detected" : "Chords Detected, Let's Play!");
-                    statusText.setValue("Analisis selesai.");
-                    detectedKeyText.setValue("Key: " + keyName);
-                    capoSuggestionText.setValue(capoAdvice);
+    public void cancelAnalysis() {
+        cancelActiveBackendRequests(true);
+    }
 
-                    historyRepository.saveOrUpdateHistory(title, historyAudioPath, sb.toString(), new ArrayList<>(detectedChords), keyIndex,
-                            new HistoryRepository.OnSaveListener() {
-                                @Override public void onSuccess(boolean isUpdate) { Log.d(TAG, "History saved"); }
-                                @Override public void onError(Exception e)        { Log.e(TAG, "Failed to save history", e); }
-                            });
-                });
-            }
+    private void cancelActiveBackendRequests(
+            boolean updateUi
+    ) {
+        analysisOperationId.incrementAndGet();
 
-            @Override
-            public void onError(Exception e) {
-                Log.e(TAG, "Analysis error", e);
-                cleanupTemporaryAnalysisFile(fileToAnalyze, historyAudioPath);
-                handler.post(() -> {
-                    isAnalyzing.setValue(false);
-                    toastMessage.setValue("Failed To Analyze: " + e.getMessage());
-                    currentChordDisplay.setValue("-");
-                });
-            }
-        });
+        SourceSeparationHelper separator =
+                activeSeparator;
+
+        activeSeparator = null;
+
+        if (separator != null) {
+            separator.cancel();
+        }
+
+        analysisRepository.cancelActiveAnalysis();
+
+        String temporaryPath =
+                activeTemporaryAnalysisPath;
+
+        String historyPath =
+                activeHistoryAudioPath;
+
+        activeTemporaryAnalysisPath = null;
+        activeHistoryAudioPath = null;
+
+        cleanupTemporaryAnalysisFile(
+                temporaryPath,
+                historyPath
+        );
+
+        if (updateUi) {
+            isAnalyzing.postValue(false);
+            currentChordDisplay.postValue("-");
+            statusText.postValue("Analisis dibatalkan.");
+        }
     }
 
     private void cleanupTemporaryAnalysisFile(String fileToAnalyze, String historyAudioPath) {
@@ -710,13 +1074,35 @@ public class HomeViewModel extends AndroidViewModel {
 
     // ─── Load History ───────────────────────────────────────────────────────
     public void loadHistoryData(
+            String historyId,
             String audioPath,
             String title,
             String savedChordData
     ) {
-        audioFilePath = audioPath;
-        audioTitle = title != null ? title : "";
+        currentHistoryId =
+                HistoryIdentity
+                        .normalizeOrCreate(
+                                historyId
+                        );
+
+        boolean hasLocalAudio =
+                audioPath != null
+                        && new File(audioPath)
+                        .isFile();
+
+        audioFilePath =
+                hasLocalAudio
+                        ? audioPath
+                        : null;
+
+        audioTitle =
+                title != null
+                        ? title
+                        : "";
+
         stopChordSync();
+        releaseMediaPlayer();
+
         detectedChords.clear();
         setDetectedChords(new ArrayList<>());
         upcomingChords.setValue(new ArrayList<>());
@@ -725,14 +1111,42 @@ public class HomeViewModel extends AndroidViewModel {
         detectedKeyText.setValue("");
         capoSuggestionText.setValue("");
 
-        if (savedChordData != null && !savedChordData.isEmpty()) {
-            parseAndLoadChords(savedChordData);
-            statusText.setValue("Data dimuat dari History.");
+        if (
+                savedChordData != null
+                        && !savedChordData.isEmpty()
+        ) {
+            parseAndLoadChords(
+                    savedChordData
+            );
+
+            statusText.setValue(
+                    hasLocalAudio
+                            ? "Data dimuat dari History."
+                            : "Hasil chord dimuat tanpa audio."
+            );
         } else {
-            statusText.setValue("File siap. Silakan Analisis.");
+            statusText.setValue(
+                    "Tidak ada hasil chord."
+            );
         }
-        fileLoaded.setValue(true);
-        setupAudioPlayer(audioPath, audioTitle);
+
+        fileLoaded.setValue(
+                hasLocalAudio
+        );
+
+        if (hasLocalAudio) {
+            setupAudioPlayer(
+                    audioPath,
+                    audioTitle
+            );
+        } else {
+            playerTitle.setValue(
+                    audioTitle
+            );
+
+            playerReady.setValue(false);
+            isPlaying.setValue(false);
+        }
     }
 
     private void parseAndLoadChords(String savedData) {
@@ -785,10 +1199,14 @@ public class HomeViewModel extends AndroidViewModel {
 
     @Override
     protected void onCleared() {
-        super.onCleared();
+        cancelActiveBackendRequests(false);
+        youtubeRepository.cancelActiveRequest();
+
         releaseMediaPlayer();
         handler.removeCallbacksAndMessages(null);
         chordHandler.removeCallbacksAndMessages(null);
+
+        super.onCleared();
     }
 
 }

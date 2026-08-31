@@ -18,6 +18,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.textfield.TextInputEditText;
+import java.io.File;
 
 public class HistoryFragment extends Fragment {
 
@@ -69,29 +70,78 @@ public class HistoryFragment extends Fragment {
 
         // Klik item → buka di HomeFragment via MainActivity
         adapter.setOnItemClickListener(item -> {
-            if (item.getFilePath() == null || item.getFilePath().isEmpty()) {
-                Toast.makeText(getContext(), getString(R.string.toast_history_audio_not_found), Toast.LENGTH_SHORT).show();
-                return;
-            }
+            File localAudio =
+                    HistoryAudioStorage
+                            .resolveExisting(
+                                    requireContext(),
+                                    item
+                            );
+
             Bundle bundle = new Bundle();
-            bundle.putString("audioPath", item.getFilePath());
-            bundle.putString("songTitle", item.getTitle());
-            bundle.putString("chordData", item.getResult());
+
+            bundle.putString(
+                    "historyId",
+                    item.getHistoryId()
+            );
+
+            bundle.putString(
+                    "audioPath",
+                    localAudio != null
+                            ? localAudio.getAbsolutePath()
+                            : null
+            );
+
+            bundle.putString(
+                    "songTitle",
+                    item.getTitle()
+            );
+
+            bundle.putString(
+                    "chordData",
+                    item.getResult()
+            );
+
+            if (localAudio == null) {
+                Toast.makeText(
+                        requireContext(),
+                        "Audio hanya tersedia di perangkat asal. "
+                                + "Hasil chord tetap dapat dilihat.",
+                        Toast.LENGTH_LONG
+                ).show();
+            }
+
             if (getActivity() instanceof MainActivity) {
-                ((MainActivity) getActivity()).playSongFromHistory(bundle);
+                ((MainActivity) getActivity())
+                        .playSongFromHistory(
+                                bundle
+                        );
             }
         });
 
-        // Klik hapus → konfirmasi dialog
-        adapter.setOnDeleteListener((docId, filePath, item) ->
-                DialogHelper.showDestructiveDialog(
-                        requireContext(),
-                        getString(R.string.dialog_title_delete_history),
-                        getString(R.string.dialog_message_delete_history, item.getTitle()),
-                        getString(R.string.btn_delete),
-                        () -> viewModel.deleteItem(docId, filePath)
-                )
-        );
+        adapter.setOnDeleteListener(item -> {
+            File localAudio =
+                    HistoryAudioStorage
+                            .resolveExisting(
+                                    requireContext(),
+                                    item
+                            );
+
+            DialogHelper.showDestructiveDialog(
+                    requireContext(),
+                    getString(
+                            R.string.dialog_title_delete_history
+                    ),
+                    getString(
+                            R.string.dialog_message_delete_history,
+                            item.getTitle()
+                    ),
+                    getString(R.string.btn_delete),
+                    () -> viewModel.deleteItem(
+                            item.getHistoryId(),
+                            localAudio
+                    )
+            );
+        });
 
         setupClickListeners();
         setupObservers();
@@ -137,7 +187,7 @@ public class HistoryFragment extends Fragment {
             .getUiState()
             .observe(getViewLifecycleOwner(), state -> {
                 // Update list
-                adapter.updateData(state.items, state.docIds);
+                adapter.updateData(state.items);
                 recyclerView.scrollToPosition(0);
 
                 // Empty state

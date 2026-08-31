@@ -8,6 +8,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -23,6 +25,33 @@ public class LibrosaAnalyzer implements ChordAnalyzerStrategy {
     private static final String TAG = "LibrosaAnalyzer";
     private static final String Public_Ip = BuildConfig.Public_IP + "/analyze_chords";
 
+    private static final OkHttpClient CLIENT =
+            new OkHttpClient.Builder()
+                    .connectTimeout(30, TimeUnit.SECONDS)
+                    .writeTimeout(120, TimeUnit.SECONDS)
+                    .readTimeout(270, TimeUnit.SECONDS)
+                    .callTimeout(300, TimeUnit.SECONDS)
+                    .retryOnConnectionFailure(true)
+                    .build();
+
+    private final AtomicBoolean canceled =
+            new AtomicBoolean(false);
+
+    private volatile BackendApiClient.RequestHandle activeRequest;
+
+    public void cancel() {
+        canceled.set(true);
+
+        BackendApiClient.RequestHandle request =
+                activeRequest;
+
+        activeRequest = null;
+
+        if (request != null) {
+            request.cancel();
+        }
+    }
+
     @Override
     public void analyzeChords(String audioPath, int sampleRate, AudioAnalysisRepository.AnalysisCallback callback) {
         File audioFile = new File(audioPath);
@@ -30,10 +59,6 @@ public class LibrosaAnalyzer implements ChordAnalyzerStrategy {
             callback.onError(new Exception("Audio file not found."));
             return;
         }
-
-        OkHttpClient client = new OkHttpClient.Builder()
-                .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
-                .build();
 
         RequestBody fileBody =
                 BackendApiClient.createAudioRequestBody(audioFile);
@@ -48,144 +73,184 @@ public class LibrosaAnalyzer implements ChordAnalyzerStrategy {
                     .url(Public_Ip)
                     .post(requestBody);
 
-            BackendApiClient.enqueueAuthenticated(
-                    client,
-                    requestBuilder,
-                    new Callback() {
-                        @Override
-                        public void onFailure(
-                                Call call,
-                                IOException e
-                        ) {
-                            Log.e(
-                                    TAG,
-                                    "Gagal menghubungi server Librosa",
-                                    e
-                            );
-
-                            callback.onError(
-                                    new Exception(
-                                            "Connection to Librosa Server failed.",
-                                            e
-                                    )
-                            );
-                        }
-
-                        @Override
-                        public void onResponse(
-                                Call call,
-                                Response response
-                        ) throws IOException {
-                            try (Response r = response) {
-                                if (!r.isSuccessful()) {
-                                    callback.onError(
-                                            new Exception(
-                                                    "Server error: " + r.code()
-                                            )
-                                    );
-                                    return;
-                                }
-
-                                if (r.body() == null) {
-                                    callback.onError(
-                                            new Exception(
-                                                    "Server returned an empty response."
-                                            )
-                                    );
-                                    return;
-                                }
-
-                                try {
-                                    String responseBody =
-                                            r.body().string();
-
-                                    JSONObject jsonResponse =
-                                            new JSONObject(responseBody);
-
-                                    String status =
-                                            jsonResponse.optString("status");
-
-                                    if ("success".equals(status)) {
-                                        int keyIndex =
-                                                jsonResponse.optInt(
-                                                        "key_index",
-                                                        -1
-                                                );
-
-                                        JSONArray dataArray =
-                                                jsonResponse.getJSONArray("data");
-
-                                        List<ChordTimestamp> chords =
-                                                new ArrayList<>();
-
-                                        for (
-                                                int i = 0;
-                                                i < dataArray.length();
-                                                i++
-                                        ) {
-                                            JSONObject obj =
-                                                    dataArray.getJSONObject(i);
-
-                                            double time =
-                                                    obj.getDouble("time");
-
-                                            String chordName =
-                                                    obj.getString("chord");
-
-                                            chords.add(
-                                                    new ChordTimestamp(
-                                                            time,
-                                                            chordName
-                                                    )
-                                            );
-                                        }
-
-                                        callback.onComplete(
-                                                chords,
-                                                keyIndex
-                                        );
-                                    } else {
-                                        callback.onError(
-                                                new Exception(
-                                                        jsonResponse.optString(
-                                                                "message",
-                                                                "Chord analysis failed."
-                                                        )
-                                                )
-                                        );
+            BackendApiClient.RequestHandle handle =
+                    BackendApiClient.enqueueAuthenticated(
+                            CLIENT,
+                            requestBuilder,
+                            new Callback() {
+                                @Override
+                                public void onFailure(
+                                        Call call,
+                                        IOException e
+                                ) {
+                                    if (
+                                            canceled.get()
+                                                    || call.isCanceled()
+                                    ) {
+                                        return;
                                     }
-                                } catch (Exception e) {
+
                                     Log.e(
                                             TAG,
-                                            "Gagal parsing JSON dari server",
+                                            "Gagal menghubungi server Librosa",
                                             e
                                     );
 
                                     callback.onError(
                                             new Exception(
-                                                    "Data format from server not recognized.",
+                                                    "Connection to Librosa Server failed.",
                                                     e
                                             )
                                     );
                                 }
-                            }
-                        }
-                    },
-                    error -> {
-                        Log.e(
-                                TAG,
-                                "Firebase authentication failed",
-                                error
-                        );
 
-                        callback.onError(
-                                new Exception(
-                                        "Authentication failed. Please reopen the app.",
+                                @Override
+                                public void onResponse(
+                                        Call call,
+                                        Response response
+                                ) throws IOException {
+                                    try (Response r = response) {
+                                        if (
+                                                canceled.get()
+                                                        || call.isCanceled()
+                                        ) {
+                                            return;
+                                        }
+
+                                        if (!r.isSuccessful()) {
+                                            callback.onError(
+                                                    new Exception(
+                                                            "Server error: "
+                                                                    + r.code()
+                                                    )
+                                            );
+                                            return;
+                                        }
+
+                                        if (r.body() == null) {
+                                            callback.onError(
+                                                    new Exception(
+                                                            "Server returned an empty response."
+                                                    )
+                                            );
+                                            return;
+                                        }
+
+                                        try {
+                                            JSONObject jsonResponse =
+                                                    new JSONObject(
+                                                            r.body().string()
+                                                    );
+
+                                            if (canceled.get()) {
+                                                return;
+                                            }
+
+                                            String status =
+                                                    jsonResponse.optString(
+                                                            "status"
+                                                    );
+
+                                            if (!"success".equals(status)) {
+                                                callback.onError(
+                                                        new Exception(
+                                                                jsonResponse.optString(
+                                                                        "message",
+                                                                        "Chord analysis failed."
+                                                                )
+                                                        )
+                                                );
+                                                return;
+                                            }
+
+                                            int keyIndex = jsonResponse.optInt("key_index", KeyDetector.UNKNOWN_KEY_INDEX);
+
+                                            if (!KeyDetector.isValidKeyIndex(keyIndex)) {
+                                                keyIndex = KeyDetector.UNKNOWN_KEY_INDEX;
+                                            }
+
+                                            JSONArray dataArray =
+                                                    jsonResponse.getJSONArray(
+                                                            "data"
+                                                    );
+
+                                            List<ChordTimestamp> chords =
+                                                    new ArrayList<>();
+
+                                            for (
+                                                    int i = 0;
+                                                    i < dataArray.length();
+                                                    i++
+                                            ) {
+                                                if (canceled.get()) {
+                                                    return;
+                                                }
+
+                                                JSONObject item =
+                                                        dataArray.getJSONObject(i);
+
+                                                chords.add(
+                                                        new ChordTimestamp(
+                                                                item.getDouble("time"),
+                                                                item.getString("chord")
+                                                        )
+                                                );
+                                            }
+
+                                            if (!canceled.get()) {
+                                                callback.onComplete(
+                                                        chords,
+                                                        keyIndex
+                                                );
+                                            }
+                                        } catch (Exception e) {
+                                            if (canceled.get()) {
+                                                return;
+                                            }
+
+                                            Log.e(
+                                                    TAG,
+                                                    "Gagal parsing JSON dari server",
+                                                    e
+                                            );
+
+                                            callback.onError(
+                                                    new Exception(
+                                                            "Data format from server "
+                                                                    + "not recognized.",
+                                                            e
+                                                    )
+                                            );
+                                        }
+                                    }
+                                }
+                            },
+                            error -> {
+                                if (canceled.get()) {
+                                    return;
+                                }
+
+                                Log.e(
+                                        TAG,
+                                        "Firebase authentication failed",
                                         error
-                                )
-                        );
-                    }
-            );
+                                );
+
+                                callback.onError(
+                                        new Exception(
+                                                "Authentication failed. "
+                                                        + "Please reopen the app.",
+                                                error
+                                        )
+                                );
+                            }
+                    );
+
+            activeRequest = handle;
+
+            if (canceled.get()) {
+                handle.cancel();
+            }
         } catch (IllegalArgumentException | NullPointerException e) {
             Log.e(TAG, "URL API tidak valid: " + Public_Ip, e);
 

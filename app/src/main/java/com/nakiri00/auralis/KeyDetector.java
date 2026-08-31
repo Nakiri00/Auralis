@@ -21,6 +21,10 @@ public class KeyDetector {
             6.33, 2.68, 3.52, 5.38, 2.60, 3.53,
             2.54, 4.75, 3.98, 2.69, 3.34, 3.17
     };
+    public static final int UNKNOWN_KEY_INDEX = -1;
+
+    private static final double CHROMA_EPSILON = 1e-6;
+    private static final double MIN_KEY_CORRELATION = 0.10;
 
     /*
      * Diatonic chords in a Major key (intervals from root):
@@ -49,35 +53,152 @@ public class KeyDetector {
      *
      * @param globalChroma normalized float[12] accumulated chroma vector
      */
-    public static int detectKey(float[] globalChroma) {
-        double maxCorr = -Double.MAX_VALUE;
-        int bestKey = 0;
-
-        for (int r = 0; r < 12; r++) {
-            double corrMajor = pearsonCorrelation(globalChroma, rotateProfile(MAJOR_PROFILE, r));
-            double corrMinor = pearsonCorrelation(globalChroma, rotateProfile(MINOR_PROFILE, r));
-
-            if (corrMajor > maxCorr) { maxCorr = corrMajor; bestKey = r; }
-            if (corrMinor > maxCorr) { maxCorr = corrMinor; bestKey = r + 12; }
+    public static int detectKey(
+            float[] globalChroma
+    ) {
+        if (!hasUsableChroma(globalChroma)) {
+            return UNKNOWN_KEY_INDEX;
         }
+
+        double maximumCorrelation =
+                -Double.MAX_VALUE;
+
+        int bestKey =
+                UNKNOWN_KEY_INDEX;
+
+        for (int root = 0; root < 12; root++) {
+            double majorCorrelation =
+                    pearsonCorrelation(
+                            globalChroma,
+                            rotateProfile(
+                                    MAJOR_PROFILE,
+                                    root
+                            )
+                    );
+
+            if (
+                    Double.isFinite(
+                            majorCorrelation
+                    )
+                            && majorCorrelation
+                            > maximumCorrelation
+            ) {
+                maximumCorrelation =
+                        majorCorrelation;
+
+                bestKey = root;
+            }
+
+            double minorCorrelation =
+                    pearsonCorrelation(
+                            globalChroma,
+                            rotateProfile(
+                                    MINOR_PROFILE,
+                                    root
+                            )
+                    );
+
+            if (
+                    Double.isFinite(
+                            minorCorrelation
+                    )
+                            && minorCorrelation
+                            > maximumCorrelation
+            ) {
+                maximumCorrelation =
+                        minorCorrelation;
+
+                bestKey = root + 12;
+            }
+        }
+
+        if (
+                bestKey == UNKNOWN_KEY_INDEX
+                        || maximumCorrelation
+                        < MIN_KEY_CORRELATION
+        ) {
+            return UNKNOWN_KEY_INDEX;
+        }
+
         return bestKey;
+    }
+
+    public static boolean isValidKeyIndex(
+            int keyIndex
+    ) {
+        return keyIndex >= 0
+                && keyIndex < 24;
+    }
+
+    private static boolean hasUsableChroma(
+            float[] globalChroma
+    ) {
+        if (
+                globalChroma == null
+                        || globalChroma.length != 12
+        ) {
+            return false;
+        }
+
+        double totalEnergy = 0;
+        double minimum = Double.MAX_VALUE;
+        double maximum = -Double.MAX_VALUE;
+
+        for (float value : globalChroma) {
+            if (!Float.isFinite(value)) {
+                return false;
+            }
+
+            totalEnergy += Math.abs(value);
+            minimum = Math.min(minimum, value);
+            maximum = Math.max(maximum, value);
+        }
+
+        return totalEnergy > CHROMA_EPSILON
+                && (
+                maximum - minimum
+        ) > CHROMA_EPSILON;
     }
 
     /**
      * Returns the human-readable name of the key, e.g. "C Major" or "A Minor".
      */
-    public static String getKeyName(int keyIndex) {
-        boolean isMinor = keyIndex >= 12;
-        int rootIdx = isMinor ? keyIndex - 12 : keyIndex;
-        return ChordTemplates.NOTES[rootIdx] + (isMinor ? " Minor" : " Major");
+    public static String getKeyName(
+            int keyIndex
+    ) {
+        if (!isValidKeyIndex(keyIndex)) {
+            return "Not detected";
+        }
+
+        boolean isMinor =
+                keyIndex >= 12;
+
+        int rootIndex =
+                isMinor
+                        ? keyIndex - 12
+                        : keyIndex;
+
+        return ChordTemplates.NOTES[rootIndex]
+                + (
+                isMinor
+                        ? " Minor"
+                        : " Major"
+        );
     }
 
     /**
      * Returns the set of diatonic chord names for the given key index.
      * Includes the harmonic-minor dominant (V Major) for minor keys.
      */
-    public static Set<String> getDiatonicChords(int keyIndex) {
-        Set<String> diatonic = new HashSet<>();
+    public static Set<String> getDiatonicChords(
+            int keyIndex
+    ) {
+        Set<String> diatonic =
+                new HashSet<>();
+
+        if (!isValidKeyIndex(keyIndex)) {
+            return diatonic;
+        }
         boolean isMinor = keyIndex >= 12;
         int rootIdx = isMinor ? keyIndex - 12 : keyIndex;
 
@@ -132,7 +253,9 @@ public class KeyDetector {
             denY += dy * dy;
         }
 
-        if (denX == 0 || denY == 0) return 0.0;
+        if (denX <= CHROMA_EPSILON || denY <= CHROMA_EPSILON) {
+            return Double.NaN;
+        }
         return num / Math.sqrt(denX * denY);
     }
 
@@ -142,6 +265,9 @@ public class KeyDetector {
      * Contoh: key A Minor, chord "E Major" → "V (harmonic)"
      */
     public static String toRomanNumeral(int keyIndex, String chordName) {
+        if (!isValidKeyIndex(keyIndex) || chordName == null || chordName.trim().isEmpty() || "-".equals(chordName) || "N/A".equals(chordName)) {
+            return "";
+        }
         boolean keyIsMinor = keyIndex >= 12;
         int keyRoot = keyIsMinor ? keyIndex - 12 : keyIndex;
         String normalizedChord = PitchClassNormalizer.normalizeChordName(chordName);

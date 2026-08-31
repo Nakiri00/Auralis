@@ -3,6 +3,7 @@ package com.nakiri00.auralis;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import okhttp3.Call;
@@ -18,7 +19,14 @@ public class YoutubeRepository {
             BuildConfig.Public_IP + "/youtube/convert";
 
     // Singleton client — thread pool dan connection pool dipakai ulang, tidak bocor
-    private static final OkHttpClient CLIENT = new OkHttpClient();
+    private static final OkHttpClient CLIENT =
+            new OkHttpClient.Builder()
+                    .connectTimeout(10, TimeUnit.SECONDS)
+                    .readTimeout(30, TimeUnit.SECONDS)
+                    .callTimeout(45, TimeUnit.SECONDS)
+                    .build();
+
+    private volatile BackendApiClient.RequestHandle activeRequest;
 
     public interface ConversionCallback {
         void onSuccess(String responseJson);
@@ -35,17 +43,26 @@ public class YoutubeRepository {
         Request.Builder requestBuilder = new Request.Builder()
                 .url(CONVERT_URL + "?video_id=" + videoId)
                 .get();
+        activeRequest =
+                BackendApiClient.enqueueAuthenticated(
+                        CLIENT,
+                        requestBuilder,
+                        callback,
+                        authenticationErrorCallback
+                );
 
         BackendApiClient.enqueueAuthenticated(CLIENT, requestBuilder, new Callback() {
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                if (call.isCanceled()) {
+                    return;
+                }
                 Log.e(TAG, "API Call Failed", e);
                 callback.onError("Failed to connect to server: " + e.getMessage());
             }
 
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                // try-with-resources memastikan response.body() SELALU ditutup
                 try (Response r = response) {
                     if (r.isSuccessful() && r.body() != null) {
                         callback.onSuccess(r.body().string());
@@ -66,5 +83,15 @@ public class YoutubeRepository {
         String pattern = "((http|https)://)?(?:[0-9A-Z-]+\\.)?(?:youtu\\.be/|youtube(?:-nocookie)?\\.com\\S*[^\\w\\s-])([\\w-]{11})(?=[^\\w-]|$)(?![?=&+%\\w.-]*(?:['\"][^<>]*>|</a>))[?=&+%\\w.-]*";
         Matcher m = Pattern.compile(pattern, Pattern.CASE_INSENSITIVE).matcher(url);
         return m.find() ? m.group(3) : "";
+    }
+    public void cancelActiveRequest() {
+        BackendApiClient.RequestHandle request =
+                activeRequest;
+
+        activeRequest = null;
+
+        if (request != null) {
+            request.cancel();
+        }
     }
 }

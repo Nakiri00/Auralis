@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.io.File;
 
 public class HistoryViewModel extends ViewModel {
 
@@ -23,8 +24,6 @@ public class HistoryViewModel extends ViewModel {
     private ListenerRegistration listenerRegistration;
 
     // Internal datasets
-    private final List<ChordHistory> masterList = new ArrayList<>();
-    private final List<String> masterDocIds = new ArrayList<>();
     private final List<ChordHistory> filteredList = new ArrayList<>();
     private final List<String> filteredDocIds = new ArrayList<>();
 
@@ -58,28 +57,34 @@ public class HistoryViewModel extends ViewModel {
         String uid = FirebaseAuth.getInstance().getUid();
         if (uid == null) return;
 
-        listenerRegistration = historyRepository.listenToHistory(
-            uid,
-            new HistoryRepository.HistoryLoadCallback() {
-                @Override
-                public void onUpdate(
-                    List<ChordHistory> items,
-                    List<String> docIds
-                ) {
-                    masterList.clear();
-                    masterList.addAll(items);
-                    masterDocIds.clear();
-                    masterDocIds.addAll(docIds);
-                    // false = jaga posisi halaman saat ini saat Firestore auto-refresh
-                    applyFiltersAndPaginate(false);
-                }
+        listenerRegistration =
+                historyRepository.listenToHistory(
+                        uid,
+                        new HistoryRepository.HistoryLoadCallback() {
+                            @Override
+                            public void onUpdate(
+                                    List<ChordHistory> items
+                            ) {
+                                masterList.clear();
+                                masterList.addAll(items);
 
-                @Override
-                public void onError(Exception e) {
-                    Log.e(TAG, "Firestore snapshot error", e);
-                }
-            }
-        );
+                                applyFiltersAndPaginate(false);
+                            }
+
+                            @Override
+                            public void onError(Exception e) {
+                                Log.e(
+                                        TAG,
+                                        "Firestore snapshot error",
+                                        e
+                                );
+
+                                toastMessage.postValue(
+                                        "Failed to load history"
+                                );
+                            }
+                        }
+                );
     }
 
     // ─── User Actions ───────────────────────────────────────────────────────
@@ -121,24 +126,48 @@ public class HistoryViewModel extends ViewModel {
         }
     }
 
-    public void deleteItem(String docId, String filePath) {
-        String uid = FirebaseAuth.getInstance().getUid();
-        if (uid == null) return;
-        historyRepository.deleteHistory(
-            uid,
-            docId,
-            filePath,
-            new HistoryRepository.OnDeleteListener() {
-                @Override
-                public void onSuccess() {
-                    toastMessage.postValue("Item Removed");
-                }
+    public void deleteItem(
+            String historyId,
+            File localAudioFile
+    ) {
+        String uid =
+                FirebaseAuth.getInstance()
+                        .getUid();
 
-                @Override
-                public void onError(Exception e) {
-                    toastMessage.postValue("Failed to remove item");
+        if (uid == null) {
+            toastMessage.postValue(
+                    "User not authenticated"
+            );
+            return;
+        }
+
+        historyRepository.deleteHistory(
+                uid,
+                historyId,
+                localAudioFile,
+                new HistoryRepository.OnDeleteListener() {
+                    @Override
+                    public void onSuccess() {
+                        toastMessage.postValue(
+                                "Item Removed"
+                        );
+                    }
+
+                    @Override
+                    public void onError(
+                            Exception error
+                    ) {
+                        Log.e(
+                                TAG,
+                                "Failed to remove history",
+                                error
+                        );
+
+                        toastMessage.postValue(
+                                "Failed to remove item"
+                        );
+                    }
                 }
-            }
         );
     }
 
@@ -148,112 +177,151 @@ public class HistoryViewModel extends ViewModel {
 
     // ─── Filter + Sort + Paginate ───────────────────────────────────────────
 
-    private void applyFiltersAndPaginate(boolean resetPage) {
+    private void applyFiltersAndPaginate(
+            boolean resetPage
+    ) {
         filteredList.clear();
-        filteredDocIds.clear();
 
-        // 1. Search
-        String query = searchQuery.toLowerCase(Locale.getDefault());
-        for (int i = 0; i < masterList.size(); i++) {
+        String query =
+                searchQuery.toLowerCase(
+                        Locale.getDefault()
+                );
+
+        for (ChordHistory history : masterList) {
             String title =
-                masterList.get(i).getTitle() != null
-                    ? masterList
-                          .get(i)
-                          .getTitle()
-                          .toLowerCase(Locale.getDefault())
-                    : "";
-            if (query.isEmpty() || title.contains(query)) {
-                filteredList.add(masterList.get(i));
-                filteredDocIds.add(masterDocIds.get(i));
+                    history.getTitle() != null
+                            ? history
+                            .getTitle()
+                            .toLowerCase(
+                                    Locale.getDefault()
+                            )
+                            : "";
+
+            if (
+                    query.isEmpty()
+                            || title.contains(query)
+            ) {
+                filteredList.add(history);
             }
         }
 
-        // 2. Sort
         if (sortType == SORT_DATE) {
-            // Firestore sudah DESCENDING (newest first); sortAscending=true → balik ke oldest first
             if (sortAscending) {
-                Collections.reverse(filteredList);
-                Collections.reverse(filteredDocIds);
+                Collections.reverse(
+                        filteredList
+                );
             }
         } else {
-            // Sort by title, sinkronisasi kedua list via index
-            List<Integer> indices = new ArrayList<>();
-            for (int i = 0; i < filteredList.size(); i++) indices.add(i);
-            final boolean asc = sortAscending;
-            indices.sort((a, b) -> {
-                String tA =
-                    filteredList.get(a).getTitle() != null
-                        ? filteredList.get(a).getTitle()
-                        : "";
-                String tB =
-                    filteredList.get(b).getTitle() != null
-                        ? filteredList.get(b).getTitle()
-                        : "";
-                return asc
-                    ? tA.compareToIgnoreCase(tB)
-                    : tB.compareToIgnoreCase(tA);
-            });
-            List<ChordHistory> sortedH = new ArrayList<>();
-            List<String> sortedIds = new ArrayList<>();
-            for (int idx : indices) {
-                sortedH.add(filteredList.get(idx));
-                sortedIds.add(filteredDocIds.get(idx));
-            }
-            filteredList.clear();
-            filteredList.addAll(sortedH);
-            filteredDocIds.clear();
-            filteredDocIds.addAll(sortedIds);
+            final boolean ascending =
+                    sortAscending;
+
+            filteredList.sort(
+                    (first, second) -> {
+                        String firstTitle =
+                                first.getTitle() != null
+                                        ? first.getTitle()
+                                        : "";
+
+                        String secondTitle =
+                                second.getTitle() != null
+                                        ? second.getTitle()
+                                        : "";
+
+                        return ascending
+                                ? firstTitle.compareToIgnoreCase(
+                                secondTitle
+                        )
+                                : secondTitle.compareToIgnoreCase(
+                                firstTitle
+                        );
+                    }
+            );
         }
 
-        // 3. Pagination
         totalPages = Math.max(
-            1,
-            (int) Math.ceil((double) filteredList.size() / PAGE_SIZE)
+                1,
+                (int) Math.ceil(
+                        (double) filteredList.size()
+                                / PAGE_SIZE
+                )
         );
+
         currentPage = resetPage
-            ? 0
-            : Math.max(0, Math.min(currentPage, totalPages - 1));
+                ? 0
+                : Math.max(
+                0,
+                Math.min(
+                        currentPage,
+                        totalPages - 1
+                )
+        );
+
         buildUiState();
     }
 
     private void buildUiState() {
-        int start = currentPage * PAGE_SIZE;
-        int end = Math.min(start + PAGE_SIZE, filteredList.size());
+        int start =
+                currentPage * PAGE_SIZE;
 
-        List<ChordHistory> pageItems = new ArrayList<>(
-            filteredList.subList(start, end)
-        );
-        List<String> pageDocIds = new ArrayList<>(
-            filteredDocIds.subList(start, end)
-        );
+        int end =
+                Math.min(
+                        start + PAGE_SIZE,
+                        filteredList.size()
+                );
 
-        String emptyMsg = filteredList.isEmpty()
-            ? (searchQuery.isEmpty()
-                  ? "Squeaky clean!"
-                  : "There are no matches in the history for \"" + searchQuery + "\"")
-            : "";
+        List<ChordHistory> pageItems =
+                new ArrayList<>(
+                        filteredList.subList(
+                                start,
+                                end
+                        )
+                );
 
-        boolean dateActive = (sortType == SORT_DATE);
-        String dateLabel = dateActive
-            ? (sortAscending ? "Oldest" : "Newest")
-            : "Newest";
-        String titleLabel = !dateActive
-            ? (sortAscending ? "Title A-Z" : "Title Z-A")
-            : "Title A-Z";
+        String emptyMessage =
+                filteredList.isEmpty()
+                        ? (
+                        searchQuery.isEmpty()
+                                ? "Squeaky clean!"
+                                : "There are no matches "
+                                + "in the history for \""
+                                + searchQuery
+                                + "\""
+                )
+                        : "";
+
+        boolean dateActive =
+                sortType == SORT_DATE;
+
+        String dateLabel =
+                dateActive
+                        ? (
+                        sortAscending
+                                ? "Oldest"
+                                : "Newest"
+                )
+                        : "Newest";
+
+        String titleLabel =
+                !dateActive
+                        ? (
+                        sortAscending
+                                ? "Title A-Z"
+                                : "Title Z-A"
+                )
+                        : "Title A-Z";
 
         uiState.setValue(
-            new HistoryUiState(
-                pageItems,
-                pageDocIds,
-                filteredList.isEmpty(),
-                emptyMsg,
-                totalPages > 1,
-                currentPage,
-                totalPages,
-                dateActive,
-                dateLabel,
-                titleLabel
-            )
+                new HistoryUiState(
+                        pageItems,
+                        filteredList.isEmpty(),
+                        emptyMessage,
+                        totalPages > 1,
+                        currentPage,
+                        totalPages,
+                        dateActive,
+                        dateLabel,
+                        titleLabel
+                )
         );
     }
 

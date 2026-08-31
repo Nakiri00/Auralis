@@ -490,43 +490,52 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
                                                 );
                                     }
 
-                                    if (maximumGlobalChroma > 0) {
+                                    int keyIndex =
+                                            KeyDetector.UNKNOWN_KEY_INDEX;
+
+                                    if (
+                                            maximumGlobalChroma
+                                                    > 1e-6f
+                                    ) {
                                         for (int i = 0; i < 12; i++) {
                                             globalChroma[i] /=
                                                     maximumGlobalChroma;
                                         }
+
+                                        keyIndex =
+                                                KeyDetector.detectKey(
+                                                        globalChroma
+                                                );
                                     }
 
-                                    int keyIndex =
-                                            KeyDetector.detectKey(
-                                                    globalChroma
-                                            );
+                                    List<ChordTimestamp> chordsForSmoothing;
 
-                                    if (keyIndex >= 0) {
-                                        List<ChordTimestamp>
-                                                keyCorrectedChords =
+                                    if (
+                                            KeyDetector.isValidKeyIndex(
+                                                    keyIndex
+                                            )
+                                    ) {
+                                        chordsForSmoothing =
                                                 applyKeyConsistency(
                                                         detectedChords,
                                                         keyIndex
                                                 );
-
-                                        List<ChordTimestamp> finalChords =
-                                                smoothTransitions(
-                                                        keyCorrectedChords
-                                                );
-
-                                        callback.onComplete(
-                                                finalChords,
-                                                keyIndex
-                                        );
                                     } else {
-                                        callback.onComplete(
-                                                smoothTransitions(
+                                        chordsForSmoothing =
+                                                new ArrayList<>(
                                                         detectedChords
-                                                ),
-                                                -1
-                                        );
+                                                );
                                     }
+
+                                    List<ChordTimestamp> finalChords =
+                                            smoothTransitions(
+                                                    chordsForSmoothing
+                                            );
+
+                                    callback.onComplete(
+                                            finalChords,
+                                            keyIndex
+                                    );
                                 }
                             };
 
@@ -632,30 +641,18 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
         );
     }
 
-    private List<ChordTimestamp> applyKeyConsistency(
-            List<ChordTimestamp> rawChords,
-            int keyIndex
-    ) {
-        if (rawChords.isEmpty()) {
-            return rawChords;
+    private List<ChordTimestamp> applyKeyConsistency(List<ChordTimestamp> rawChords, int keyIndex) {
+        if (rawChords == null || rawChords.isEmpty() || !KeyDetector.isValidKeyIndex(keyIndex)) {
+            return rawChords != null ? rawChords : new ArrayList<>();
         }
-
         Set<String> diatonicChords =
                 KeyDetector.getDiatonicChords(keyIndex);
 
-        Log.d(
-                TAG,
-                "Detected key: "
-                        + KeyDetector.getKeyName(keyIndex)
-        );
+        Log.d(TAG, "Detected key: " + KeyDetector.getKeyName(keyIndex));
 
-        Log.d(
-                TAG,
-                "Diatonic chords: " + diatonicChords
-        );
+        Log.d(TAG, "Diatonic chords: " + diatonicChords);
 
-        List<ChordTimestamp> result =
-                new ArrayList<>();
+        List<ChordTimestamp> result = new ArrayList<>();
 
         for (ChordTimestamp chordTimestamp : rawChords) {
             String chord =
@@ -694,13 +691,7 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
             }
 
             if (!correctedChord.equals(chord)) {
-                Log.d(
-                        TAG,
-                        "Key correction: "
-                                + chord
-                                + " -> "
-                                + correctedChord
-                );
+                Log.d(TAG, "Key correction: " + chord + " -> " + correctedChord);
             }
 
             result.add(

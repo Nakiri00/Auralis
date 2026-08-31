@@ -480,21 +480,58 @@ public class HomeFragment extends Fragment {
     }
 
     // Dipanggil dari MainActivity saat user memilih item di HistoryFragment
-    public void loadHistoryData(Bundle bundle) {
-        if (bundle == null || viewModel == null) return;
-        String audioPath = bundle.getString("audioPath");
-        String title = bundle.getString("songTitle");
-        String savedChordData = bundle.getString("chordData");
+    public void loadHistoryData(
+            Bundle bundle
+    ) {
+        if (
+                bundle == null
+                        || viewModel == null
+        ) {
+            return;
+        }
 
-        if (audioPath != null) {
-            if (new File(audioPath).exists()) {
-                viewModel.loadHistoryData(audioPath, title, savedChordData);
-                buttonDetectPitch.setVisibility(View.GONE);
-                buttonDetectPitch.setEnabled(true);
-                buttonDownload.setVisibility(View.GONE);
-            } else {
-                Toast.makeText(getContext(), getString(R.string.toast_history_audio_not_found), Toast.LENGTH_SHORT).show();
-            }
+        String historyId =
+                bundle.getString("historyId");
+
+        String audioPath =
+                bundle.getString("audioPath");
+
+        String title =
+                bundle.getString("songTitle");
+
+        String savedChordData =
+                bundle.getString("chordData");
+
+        boolean hasLocalAudio =
+                audioPath != null
+                        && new File(audioPath)
+                        .isFile();
+
+        viewModel.loadHistoryData(
+                historyId,
+                hasLocalAudio
+                        ? audioPath
+                        : null,
+                title,
+                savedChordData
+        );
+
+        buttonDetectPitch.setVisibility(
+                View.GONE
+        );
+
+        buttonDownload.setVisibility(
+                View.GONE
+        );
+
+        if (!hasLocalAudio) {
+            layoutAudioPlayer.setVisibility(
+                    View.GONE
+            );
+
+            buttonDetectPitch.setEnabled(
+                    false
+            );
         }
     }
 

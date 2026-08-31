@@ -1,34 +1,65 @@
 package com.nakiri00.auralis;
 
-public class CapoSuggester {
+public final class CapoSuggester {
 
-    // Key-key yang "mudah" di gitar (banyak open chord)
-    private static final int[] EASY_KEYS = {0, 2, 4, 5, 7, 9}; // C, D, E, F, G, A
+    private static final int[] EASY_KEYS = {
+            0, 2, 4, 5, 7, 9
+    };
 
-    /**
-     * Memberikan saran capo berdasarkan key terdeteksi.
-     * Return: "Capo X → mainkan di key Y" atau "Tidak perlu capo"
-     *
-     * @param keyIndex key terdeteksi dari KeyDetector (0-23)
-     */
-    public static String suggest(int keyIndex) {
-        boolean isMinor = keyIndex >= 12;
-        int detectedRoot = isMinor ? keyIndex - 12 : keyIndex;
+    private CapoSuggester() {
+    }
 
-        // Cek apakah sudah di easy key
+    public static String suggest(
+            int keyIndex
+    ) {
+        if (
+                !KeyDetector.isValidKeyIndex(
+                        keyIndex
+                )
+        ) {
+            return "Capo suggestion unavailable";
+        }
+
+        boolean isMinor =
+                keyIndex >= 12;
+
+        int detectedRoot =
+                isMinor
+                        ? keyIndex - 12
+                        : keyIndex;
+
         for (int easyKey : EASY_KEYS) {
             if (detectedRoot == easyKey) {
-                return "No capo needed - already in " + KeyDetector.getKeyName(keyIndex);
+                return "No capo needed - already in "
+                        + KeyDetector.getKeyName(
+                        keyIndex
+                );
             }
         }
 
-        // Cari capo paling rendah yang menghasilkan easy key
         for (int capo = 1; capo <= 7; capo++) {
-            int effectiveRoot = (detectedRoot - capo + 12) % 12;
+            int effectiveRoot =
+                    (
+                            detectedRoot
+                                    - capo
+                                    + 12
+                    ) % 12;
+
             for (int easyKey : EASY_KEYS) {
                 if (effectiveRoot == easyKey) {
-                    String easyKeyName = ChordTemplates.NOTES[effectiveRoot] + (isMinor ? " Minor" : " Major");
-                    return "Capo fret " + capo + " → play in " + easyKeyName;
+                    String easyKeyName =
+                            ChordTemplates.NOTES[
+                                    effectiveRoot
+                                    ] + (
+                                    isMinor
+                                            ? " Minor"
+                                            : " Major"
+                            );
+
+                    return "Capo fret "
+                            + capo
+                            + " → play in "
+                            + easyKeyName;
                 }
             }
         }
