@@ -69,7 +69,9 @@ public class HomeFragment extends Fragment {
     private TextView tvCapoSuggestion;
     private View chordHintCard;
     private TextView tvChordHintTitle;
-    private RecyclerView rvCurrentChordPositions;
+    private ChordView currentChordHintView;
+    private TextView tvChordHintPosition;
+    private TextView tvChordHintFrets;
 
 
     private long downloadID = -1;
@@ -187,22 +189,21 @@ public class HomeFragment extends Fragment {
                         R.id.tv_chord_hint_title
                 );
 
-        rvCurrentChordPositions =
+
+        currentChordHintView =
                 view.findViewById(
-                        R.id.rv_current_chord_positions
+                        R.id.cv_current_chord_hint
                 );
 
-        rvCurrentChordPositions.setLayoutManager(
-                new LinearLayoutManager(
-                        requireContext(),
-                        LinearLayoutManager.HORIZONTAL,
-                        false
-                )
-        );
+        tvChordHintPosition =
+                view.findViewById(
+                        R.id.tv_chord_hint_position
+                );
 
-        rvCurrentChordPositions.setNestedScrollingEnabled(
-                false
-        );
+        tvChordHintFrets =
+                view.findViewById(
+                        R.id.tv_chord_hint_frets
+                );
 
 
         // Initial state
@@ -368,47 +369,45 @@ public class HomeFragment extends Fragment {
                 .observe(
                         getViewLifecycleOwner(),
                         group -> {
-                            List<String> positions =
-                                    group != null
-                                            && group.getPositions() != null
-                                            ? group.getPositions()
-                                            : Collections.emptyList();
+                            ChordFingeringSelector.Selection selection =
+                                    ChordFingeringSelector.select(
+                                            group
+                                    );
 
                             if (
                                     group == null
-                                            || positions.isEmpty()
+                                            || selection == null
                             ) {
                                 chordHintCard.setVisibility(
                                         View.GONE
                                 );
-
-                                rvCurrentChordPositions.setAdapter(
-                                        null
-                                );
-
                                 return;
                             }
 
-                            List<Integer> baseFrets =
-                                    group.getBaseFrets() != null
-                                            ? group.getBaseFrets()
-                                            : Collections.emptyList();
-
                             tvChordHintTitle.setText(group.getChordName());
 
-                            ChordGroupAdapter.PositionAdapter adapter =
-                                    new ChordGroupAdapter.PositionAdapter(
-                                            positions,
-                                            baseFrets
-                                    );
-
-                            rvCurrentChordPositions.setAdapter(
-                                    adapter
+                            currentChordHintView.setChordPositions(
+                                    selection.getFretPositions()
                             );
 
-                            rvCurrentChordPositions.scrollToPosition(
-                                    0
+                            tvChordHintFrets.setText(
+                                    selection.getFretPositions()
                             );
+
+                            if (selection.hasOpenString()) {
+                                tvChordHintPosition.setText(
+                                        "Open Position"
+                                );
+                            } else {
+                                int displayedFret =
+                                        selection.getFirstFingerFret() > 0
+                                                ? selection.getFirstFingerFret()
+                                                : selection.getBaseFret();
+
+                                tvChordHintPosition.setText(
+                                        getString(displayedFret)
+                                );
+                            }
 
                             chordHintCard.setVisibility(
                                     View.VISIBLE

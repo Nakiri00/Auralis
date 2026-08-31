@@ -194,13 +194,39 @@
                             android:layout_marginBottom="8dp"
                             android:background="?attr/colorOutlineVariant" />
 
-                        <androidx.recyclerview.widget.RecyclerView
-                            android:id="@+id/rv_current_chord_positions"
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:clipToPadding="false"
-                            android:orientation="horizontal"
-                            android:paddingHorizontal="8dp" />
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical"
+                            android:padding="8dp">
+
+                            <TextView
+                                android:id="@+id/tv_chord_hint_position"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginBottom="6dp"
+                                android:text=""
+                                android:textColor="?attr/colorOnBackground"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <com.nakiri00.auralis.ChordView
+                                android:id="@+id/cv_current_chord_hint"
+                                android:layout_width="70dp"
+                                android:layout_height="90dp" />
+
+                            <TextView
+                                android:id="@+id/tv_chord_hint_frets"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="6dp"
+                                android:fontFamily="monospace"
+                                android:text="X 3 2 0 1 0"
+                                android:textColor="?attr/colorOnBackground"
+                                android:textSize="13sp" />
+
+                        </LinearLayout>
 
                     </LinearLayout>
 
