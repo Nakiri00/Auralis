@@ -1,12 +1,35 @@
 package com.nakiri00.auralis;
 
 import java.util.UUID;
+import java.util.Locale;
 
 public final class HistoryIdentity {
 
     private static final int MAX_ID_LENGTH = 200;
 
     private HistoryIdentity() {
+    }
+
+    public static String fromAudioFingerprint(
+            String fingerprint
+    ) {
+        if (fingerprint == null) {
+            throw new IllegalArgumentException(
+                    "Audio fingerprint is required"
+            );
+        }
+
+        String normalized =
+                fingerprint.trim()
+                        .toLowerCase(Locale.US);
+
+        if (!normalized.matches("[a-f0-9]{64}")) {
+            throw new IllegalArgumentException(
+                    "Audio fingerprint is invalid"
+            );
+        }
+
+        return "audio-" + normalized;
     }
 
     public static String newId() {

@@ -5,4 +5,9 @@ public class TFLiteMLAnalyzer implements ChordAnalyzerStrategy{
     public void analyzeChords(String audioPath, int sampleRate, AudioAnalysisRepository.AnalysisCallback callback) {
 
     }
+
+    @Override
+    public void cancel() {
+
+    }
 }

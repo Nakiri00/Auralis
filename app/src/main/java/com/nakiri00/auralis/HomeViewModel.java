@@ -105,6 +105,31 @@ public class HomeViewModel extends AndroidViewModel {
                 new HistoryRepository(
                         application.getApplicationContext()
                 );
+        new Thread(
+                () -> {
+                    try {
+                        chordHintResolver.load(
+                                application.getApplicationContext()
+                        );
+
+                        handler.post(() -> {
+                            lastChordHint = null;
+
+                            updateActiveChordHint(
+                                    currentChordDisplay.getValue()
+                            );
+                        });
+
+                    } catch (Exception error) {
+                        Log.e(
+                                TAG,
+                                "Failed to load chord hints",
+                                error
+                        );
+                    }
+                },
+                "auralis-chord-hint-loader"
+        ).start();
     }
     public LiveData<Boolean> getIsLoading() {
         return isLoading;
@@ -175,6 +200,18 @@ public class HomeViewModel extends AndroidViewModel {
             new AtomicLong(0);
 
     private volatile File pendingHistoryAudioDraft;
+
+    private final ChordHintResolver chordHintResolver =
+            new ChordHintResolver();
+
+    private final MutableLiveData<ChordGroup> activeChordHint =
+            new MutableLiveData<>(null);
+
+    private ChordGroup lastChordHint;
+
+    public LiveData<ChordGroup> getActiveChordHint() {
+        return activeChordHint;
+    }
 
 
 //    private List<ChordTimestamp> postProcess(List<ChordTimestamp> raw) {
@@ -250,7 +287,46 @@ public class HomeViewModel extends AndroidViewModel {
         // Gunakan postValue karena analisis berjalan di background thread
         detectedChordsList.postValue(chords);
     }
+    private void updateCurrentChordAndHint(
+            String chordName
+    ) {
+        String safeChordName =
+                chordName != null
+                        ? chordName
+                        : "-";
 
+        currentChordDisplay.setValue(
+                safeChordName
+        );
+
+        updateActiveChordHint(
+                safeChordName
+        );
+    }
+
+    private void updateActiveChordHint(
+            String chordName
+    ) {
+        ChordGroup resolvedHint =
+                chordHintResolver.resolve(
+                        chordName
+                );
+
+        if (lastChordHint == resolvedHint) {
+            return;
+        }
+
+        lastChordHint = resolvedHint;
+
+        activeChordHint.setValue(
+                resolvedHint
+        );
+    }
+
+    private void clearActiveChordHint() {
+        lastChordHint = null;
+        activeChordHint.setValue(null);
+    }
     // ─── YouTube Conversion ─────────────────────────────────────────────────
     public void convertYoutubeUrl(String url) {
         isLoading.postValue(true);
@@ -371,13 +447,13 @@ public class HomeViewModel extends AndroidViewModel {
                                     + ".mp3";
                 }
 
-                String historyId =
+                String draftId =
                         HistoryIdentity.newId();
 
                 draft =
                         HistoryAudioStorage.createDraft(
                                 context,
-                                historyId,
+                                draftId,
                                 originalFileName
                         );
 
@@ -438,6 +514,7 @@ public class HomeViewModel extends AndroidViewModel {
                     }
                 }
 
+
                 if (
                         fileImportOperationId.get()
                                 != importOperationId
@@ -448,6 +525,33 @@ public class HomeViewModel extends AndroidViewModel {
                     );
                     return;
                 }
+                String audioFingerprint =
+                        AudioFingerprint.sha256(
+                                draft
+                        );
+
+                if (
+                        fileImportOperationId.get()
+                                != importOperationId
+                ) {
+                    HistoryAudioStorage.discardDraft(
+                            context,
+                            draft
+                    );
+                    return;
+                }
+
+                final String historyId =
+                        HistoryIdentity.fromAudioFingerprint(
+                                audioFingerprint
+                        );
+
+                Log.d(
+                        TAG,
+                        "Resolved stable History ID: "
+                                + historyId
+                );
+
 
                 String resolvedTitle =
                         customTitle != null
@@ -676,10 +780,21 @@ public class HomeViewModel extends AndroidViewModel {
     }
 
     public void seekTo(int position) {
-        if (mediaPlayer != null) {
-            mediaPlayer.seekTo(position);
-            playerPosition.postValue(position);
+        if (mediaPlayer == null) {
+            return;
         }
+
+        mediaPlayer.seekTo(position);
+        playerPosition.setValue(position);
+
+        double positionSeconds =
+                position / 1000.0;
+
+        updateCurrentChordAndHint(
+                getCurrentChordAt(
+                        positionSeconds
+                )
+        );
     }
 
     public void releaseMediaPlayer() {
@@ -691,6 +806,7 @@ public class HomeViewModel extends AndroidViewModel {
         }
         playerReady.postValue(false);
         isPlaying.postValue(false);
+        clearActiveChordHint();
     }
 
     private void startSeekBarUpdate() {
@@ -712,7 +828,12 @@ public class HomeViewModel extends AndroidViewModel {
             public void run() {
                 if (mediaPlayer != null && mediaPlayer.isPlaying()) {
                     double sec = mediaPlayer.getCurrentPosition() / 1000.0;
-                    currentChordDisplay.postValue(getCurrentChordAt(sec));
+                    String activeChord =
+                            getCurrentChordAt(sec);
+
+                    updateCurrentChordAndHint(
+                            activeChord
+                    );
                     long currentPositionMs = mediaPlayer.getCurrentPosition();
                     int activeIndex = getCurrentChordIndexAt(sec);
                     calculateChordProgress(currentPositionMs, detectedChords, activeIndex);
@@ -777,7 +898,7 @@ public class HomeViewModel extends AndroidViewModel {
 
         isAnalyzing.setValue(true);
         currentChordDisplay.setValue("Cleaning Audio...");
-
+        clearActiveChordHint();
         detectedChords.clear();
         setDetectedChords(new ArrayList<>());
         upcomingChords.setValue(new ArrayList<>());

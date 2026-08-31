@@ -38,6 +38,7 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import java.util.Collections;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.util.List;
@@ -66,6 +67,9 @@ public class HomeFragment extends Fragment {
     private Button exportchord;
     private TextView tvDetectedKey;
     private TextView tvCapoSuggestion;
+    private View chordHintCard;
+    private TextView tvChordHintTitle;
+    private RecyclerView rvCurrentChordPositions;
 
 
     private long downloadID = -1;
@@ -173,9 +177,36 @@ public class HomeFragment extends Fragment {
         rvUpcomingChords.setAdapter(upcomingAdapter);
         tvDetectedKey     = view.findViewById(R.id.tv_detected_key);
         tvCapoSuggestion  = view.findViewById(R.id.tv_capo_suggestion);
+        chordHintCard =
+                view.findViewById(
+                        R.id.card_chord_hint
+                );
+
+        tvChordHintTitle =
+                view.findViewById(
+                        R.id.tv_chord_hint_title
+                );
+
+        rvCurrentChordPositions =
+                view.findViewById(
+                        R.id.rv_current_chord_positions
+                );
+
+        rvCurrentChordPositions.setLayoutManager(
+                new LinearLayoutManager(
+                        requireContext(),
+                        LinearLayoutManager.HORIZONTAL,
+                        false
+                )
+        );
+
+        rvCurrentChordPositions.setNestedScrollingEnabled(
+                false
+        );
 
 
         // Initial state
+        chordHintCard.setVisibility(View.GONE);
         buttonDetectPitch.setEnabled(false);
         buttonDownload.setVisibility(View.GONE);
         layoutAudioPlayer.setVisibility(View.GONE);
@@ -332,6 +363,58 @@ public class HomeFragment extends Fragment {
                     resultTextView.setVisibility(View.GONE);
                 }
             });
+        viewModel
+                .getActiveChordHint()
+                .observe(
+                        getViewLifecycleOwner(),
+                        group -> {
+                            List<String> positions =
+                                    group != null
+                                            && group.getPositions() != null
+                                            ? group.getPositions()
+                                            : Collections.emptyList();
+
+                            if (
+                                    group == null
+                                            || positions.isEmpty()
+                            ) {
+                                chordHintCard.setVisibility(
+                                        View.GONE
+                                );
+
+                                rvCurrentChordPositions.setAdapter(
+                                        null
+                                );
+
+                                return;
+                            }
+
+                            List<Integer> baseFrets =
+                                    group.getBaseFrets() != null
+                                            ? group.getBaseFrets()
+                                            : Collections.emptyList();
+
+                            tvChordHintTitle.setText(group.getChordName());
+
+                            ChordGroupAdapter.PositionAdapter adapter =
+                                    new ChordGroupAdapter.PositionAdapter(
+                                            positions,
+                                            baseFrets
+                                    );
+
+                            rvCurrentChordPositions.setAdapter(
+                                    adapter
+                            );
+
+                            rvCurrentChordPositions.scrollToPosition(
+                                    0
+                            );
+
+                            chordHintCard.setVisibility(
+                                    View.VISIBLE
+                            );
+                        }
+                );
 
         viewModel
             .getDownloadLink()
