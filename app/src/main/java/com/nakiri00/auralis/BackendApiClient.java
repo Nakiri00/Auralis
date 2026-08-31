@@ -4,7 +4,13 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 
 import java.io.File;
+import java.net.SocketTimeoutException;
 import java.util.Locale;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -20,6 +26,21 @@ import okhttp3.RequestBody;
  */
 public final class BackendApiClient {
 
+    private static final ScheduledExecutorService DEADLINE_EXECUTOR =
+            Executors.newSingleThreadScheduledExecutor(
+                    new ThreadFactory() {
+                        @Override
+                        public Thread newThread(Runnable runnable) {
+                            Thread thread = new Thread(
+                                    runnable,
+                                    "auralis-request-deadline"
+                            );
+                            thread.setDaemon(true);
+                            return thread;
+                        }
+                    }
+            );
+
     public interface AuthenticationErrorCallback {
         void onError(Exception error);
     }
@@ -29,7 +50,13 @@ public final class BackendApiClient {
         private final AtomicBoolean canceled =
                 new AtomicBoolean(false);
 
+        private final AtomicBoolean finished =
+                new AtomicBoolean(false);
+
         private final AtomicReference<Call> callReference =
+                new AtomicReference<>();
+
+        private final AtomicReference<ScheduledFuture<?>> deadlineReference =
                 new AtomicReference<>();
 
         private RequestHandle() {
@@ -37,7 +64,12 @@ public final class BackendApiClient {
 
         public void cancel() {
             canceled.set(true);
+            finished.compareAndSet(false, true);
+            cancelDeadline();
+            cancelAttachedCall();
+        }
 
+        private void cancelAttachedCall() {
             Call call = callReference.getAndSet(null);
 
             if (call != null) {
@@ -50,7 +82,7 @@ public final class BackendApiClient {
         }
 
         private boolean attach(Call call) {
-            if (canceled.get()) {
+            if (canceled.get() || finished.get()) {
                 call.cancel();
                 return false;
             }
@@ -59,7 +91,7 @@ public final class BackendApiClient {
 
             // Menutup race jika cancel() dipanggil tepat setelah
             // pemeriksaan pertama tetapi sebelum call disimpan.
-            if (canceled.get()) {
+            if (canceled.get() || finished.get()) {
                 if (callReference.compareAndSet(call, null)) {
                     call.cancel();
                 }
@@ -67,6 +99,79 @@ public final class BackendApiClient {
             }
 
             return true;
+        }
+
+        private void armDeadline(
+                long timeout,
+                TimeUnit unit,
+                AuthenticationErrorCallback timeoutCallback
+        ) {
+            if (timeout <= 0) {
+                throw new IllegalArgumentException(
+                        "Request timeout must be positive"
+                );
+            }
+
+            ScheduledFuture<?> future =
+                    DEADLINE_EXECUTOR.schedule(
+                            () -> {
+                                if (!expire()) {
+                                    return;
+                                }
+
+                                timeoutCallback.onError(
+                                        new SocketTimeoutException(
+                                                "Backend request exceeded its total deadline"
+                                        )
+                                );
+                            },
+                            timeout,
+                            unit
+                    );
+
+            if (!deadlineReference.compareAndSet(null, future)) {
+                future.cancel(false);
+                throw new IllegalStateException(
+                        "Request deadline is already armed"
+                );
+            }
+
+            if (finished.get()) {
+                cancelDeadline();
+            }
+        }
+
+        private boolean expire() {
+            if (!finished.compareAndSet(false, true)) {
+                return false;
+            }
+
+            canceled.set(true);
+            cancelAttachedCall();
+            return true;
+        }
+
+        private boolean finish() {
+            if (!finished.compareAndSet(false, true)) {
+                return false;
+            }
+
+            cancelDeadline();
+            callReference.set(null);
+            return !canceled.get();
+        }
+
+        private boolean canDeliver() {
+            return !canceled.get() && !finished.get();
+        }
+
+        private void cancelDeadline() {
+            ScheduledFuture<?> future =
+                    deadlineReference.getAndSet(null);
+
+            if (future != null) {
+                future.cancel(false);
+            }
         }
     }
 
@@ -79,14 +184,64 @@ public final class BackendApiClient {
             Callback callback,
             AuthenticationErrorCallback authenticationErrorCallback
     ) {
+        return enqueueAuthenticatedInternal(
+                client,
+                requestBuilder,
+                callback,
+                authenticationErrorCallback,
+                null,
+                null
+        );
+    }
+
+    public static RequestHandle enqueueAuthenticated(
+            OkHttpClient client,
+            Request.Builder requestBuilder,
+            Callback callback,
+            AuthenticationErrorCallback authenticationErrorCallback,
+            long totalTimeout,
+            TimeUnit timeoutUnit
+    ) {
+        return enqueueAuthenticatedInternal(
+                client,
+                requestBuilder,
+                callback,
+                authenticationErrorCallback,
+                totalTimeout,
+                timeoutUnit
+        );
+    }
+
+    private static RequestHandle enqueueAuthenticatedInternal(
+            OkHttpClient client,
+            Request.Builder requestBuilder,
+            Callback callback,
+            AuthenticationErrorCallback authenticationErrorCallback,
+            Long totalTimeout,
+            TimeUnit timeoutUnit
+    ) {
         RequestHandle handle = new RequestHandle();
         Request unsignedRequest = requestBuilder.build();
+
+        if (totalTimeout != null) {
+            if (timeoutUnit == null) {
+                throw new IllegalArgumentException(
+                        "Timeout unit is required"
+                );
+            }
+
+            handle.armDeadline(
+                    totalTimeout,
+                    timeoutUnit,
+                    authenticationErrorCallback
+            );
+        }
 
         if (
                 !BuildConfig.DEBUG
                         && !unsignedRequest.url().isHttps()
         ) {
-            if (!handle.isCanceled()) {
+            if (handle.finish()) {
                 authenticationErrorCallback.onError(
                         new IllegalStateException(
                                 "Backend URL must use HTTPS in release builds"
@@ -125,7 +280,7 @@ public final class BackendApiClient {
                                             "Anonymous authentication failed"
                                     );
 
-                            if (!handle.isCanceled()) {
+                            if (handle.finish()) {
                                 authenticationErrorCallback.onError(
                                         error
                                 );
@@ -189,7 +344,7 @@ public final class BackendApiClient {
                                         "Firebase ID token is unavailable"
                                 );
 
-                        if (!handle.isCanceled()) {
+                        if (handle.finish()) {
                             authenticationErrorCallback.onError(
                                     error
                             );
@@ -215,7 +370,42 @@ public final class BackendApiClient {
                         return;
                     }
 
-                    call.enqueue(callback);
+                    call.enqueue(
+                            new Callback() {
+                                @Override
+                                public void onFailure(
+                                        Call completedCall,
+                                        java.io.IOException exception
+                                ) {
+                                    if (handle.finish()) {
+                                        callback.onFailure(
+                                                completedCall,
+                                                exception
+                                        );
+                                    }
+                                }
+
+                                @Override
+                                public void onResponse(
+                                        Call completedCall,
+                                        okhttp3.Response response
+                                ) throws java.io.IOException {
+                                    if (!handle.canDeliver()) {
+                                        response.close();
+                                        return;
+                                    }
+
+                                    try {
+                                        callback.onResponse(
+                                                completedCall,
+                                                response
+                                        );
+                                    } finally {
+                                        handle.finish();
+                                    }
+                                }
+                            }
+                    );
                 });
     }
 

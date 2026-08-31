@@ -2,16 +2,18 @@ package com.nakiri00.auralis;
 
 import com.google.firebase.Timestamp;
 import com.google.firebase.firestore.Exclude;
+import com.google.firebase.firestore.IgnoreExtraProperties;
 
 import java.util.List;
 
+@IgnoreExtraProperties
 public class ChordHistory {
 
     @Exclude
     private String historyId;
+
     private String title;
     private String audioFileName;
-    private String result;
     private List<ChordTimestamp> chords;
     private Integer keyIndex;
     private Timestamp timestamp;
@@ -22,32 +24,10 @@ public class ChordHistory {
     public ChordHistory() {
     }
 
-//    public ChordHistory(
-//            String historyId,
-//            String title,
-//            String result,
-//            String audioFileName,
-//            List<ChordTimestamp> chords,
-//            Integer keyIndex,
-//            Timestamp timestamp
-//    ) {
-//        this.historyId = historyId;
-//        this.title = title;
-//        this.result = result;
-//        this.audioFileName = audioFileName;
-//        this.chords = chords;
-//        this.keyIndex = keyIndex;
-//        this.timestamp = timestamp;
-//    }
-
-    /**
-     * Constructor kompatibilitas jika masih ada pemanggilan lama.
-     */
     public ChordHistory(
             String historyId,
             String title,
             String audioFileName,
-            String result,
             List<ChordTimestamp> chords,
             Integer keyIndex,
             Timestamp timestamp
@@ -55,7 +35,6 @@ public class ChordHistory {
         this.historyId = historyId;
         this.title = title;
         this.audioFileName = audioFileName;
-        this.result = result;
         this.chords = chords;
         this.keyIndex = keyIndex;
         this.timestamp = timestamp;
@@ -78,21 +57,11 @@ public class ChordHistory {
         this.title = title;
     }
 
-    public String getResult() {
-        return result;
-    }
-
-    public void setResult(String result) {
-        this.result = result;
-    }
-
     public String getAudioFileName() {
         return audioFileName;
     }
 
-    public void setAudioFileName(
-            String audioFileName
-    ) {
+    public void setAudioFileName(String audioFileName) {
         this.audioFileName = audioFileName;
     }
 
@@ -100,9 +69,7 @@ public class ChordHistory {
         return chords;
     }
 
-    public void setChords(
-            List<ChordTimestamp> chords
-    ) {
+    public void setChords(List<ChordTimestamp> chords) {
         this.chords = chords;
     }
 
@@ -118,9 +85,7 @@ public class ChordHistory {
         return timestamp;
     }
 
-    public void setTimestamp(
-            Timestamp timestamp
-    ) {
+    public void setTimestamp(Timestamp timestamp) {
         this.timestamp = timestamp;
     }
 }

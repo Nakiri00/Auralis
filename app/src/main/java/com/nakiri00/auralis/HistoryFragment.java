@@ -71,35 +71,10 @@ public class HistoryFragment extends Fragment {
         // Klik item → buka di HomeFragment via MainActivity
         adapter.setOnItemClickListener(item -> {
             File localAudio =
-                    HistoryAudioStorage
-                            .resolveExisting(
-                                    requireContext(),
-                                    item
-                            );
-
-            Bundle bundle = new Bundle();
-
-            bundle.putString(
-                    "historyId",
-                    item.getHistoryId()
-            );
-
-            bundle.putString(
-                    "audioPath",
-                    localAudio != null
-                            ? localAudio.getAbsolutePath()
-                            : null
-            );
-
-            bundle.putString(
-                    "songTitle",
-                    item.getTitle()
-            );
-
-            bundle.putString(
-                    "chordData",
-                    item.getResult()
-            );
+                    HistoryAudioStorage.resolveExisting(
+                            requireContext(),
+                            item
+                    );
 
             if (localAudio == null) {
                 Toast.makeText(
@@ -113,7 +88,10 @@ public class HistoryFragment extends Fragment {
             if (getActivity() instanceof MainActivity) {
                 ((MainActivity) getActivity())
                         .playSongFromHistory(
-                                bundle
+                                item,
+                                localAudio != null
+                                        ? localAudio.getAbsolutePath()
+                                        : null
                         );
             }
         });

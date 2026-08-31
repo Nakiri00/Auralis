@@ -8,6 +8,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
+import java.net.SocketTimeoutException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -26,12 +27,17 @@ public class SourceSeparationHelper {
     private static final String PUBLIC_URL =
             BuildConfig.Public_IP + "/separate";
 
+    private static final long TOTAL_TIMEOUT_SECONDS = 660L;
+
     private static final OkHttpClient CLIENT =
             new OkHttpClient.Builder()
                     .connectTimeout(30, TimeUnit.SECONDS)
                     .writeTimeout(120, TimeUnit.SECONDS)
                     .readTimeout(620, TimeUnit.SECONDS)
-                    .callTimeout(660, TimeUnit.SECONDS)
+                    .callTimeout(
+                            TOTAL_TIMEOUT_SECONDS,
+                            TimeUnit.SECONDS
+                    )
                     .retryOnConnectionFailure(true)
                     .build();
 
@@ -105,7 +111,9 @@ public class SourceSeparationHelper {
                                 }
 
                                 Log.e(TAG, "API call gagal", e);
-                                callback.onError(e);
+                                callback.onError(
+                                        mapRequestFailure(e)
+                                );
                             }
 
                             @Override
@@ -122,6 +130,15 @@ public class SourceSeparationHelper {
                                     }
 
                                     if (!r.isSuccessful()) {
+                                        if (r.code() == 504) {
+                                            callback.onError(
+                                                    new SocketTimeoutException(
+                                                            "Audio separation timed out on the server"
+                                                    )
+                                            );
+                                            return;
+                                        }
+
                                         callback.onError(
                                                 new Exception(
                                                         "Server error: "
@@ -216,6 +233,13 @@ public class SourceSeparationHelper {
                                 return;
                             }
 
+                            if (isTimeout(error)) {
+                                callback.onError(
+                                        mapRequestFailure(error)
+                                );
+                                return;
+                            }
+
                             Log.e(
                                     TAG,
                                     "Firebase authentication failed",
@@ -229,7 +253,9 @@ public class SourceSeparationHelper {
                                             error
                                     )
                             );
-                        }
+                        },
+                        TOTAL_TIMEOUT_SECONDS,
+                        TimeUnit.SECONDS
                 );
 
         activeRequest = handle;
@@ -256,6 +282,36 @@ public class SourceSeparationHelper {
 
     public boolean isCanceled() {
         return canceled.get();
+    }
+
+    private static Exception mapRequestFailure(
+            Throwable error
+    ) {
+        if (isTimeout(error)) {
+            return new Exception(
+                    "Audio separation timed out. Please try again.",
+                    error
+            );
+        }
+
+        return new Exception(
+                "Unable to connect to the audio separation server.",
+                error
+        );
+    }
+
+    private static boolean isTimeout(Throwable error) {
+        Throwable current = error;
+
+        while (current != null) {
+            if (current instanceof SocketTimeoutException) {
+                return true;
+            }
+
+            current = current.getCause();
+        }
+
+        return false;
     }
 
     private void deletePartialOutput() {

@@ -6,6 +6,7 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -24,13 +25,17 @@ public class LibrosaAnalyzer implements ChordAnalyzerStrategy {
 
     private static final String TAG = "LibrosaAnalyzer";
     private static final String Public_Ip = BuildConfig.Public_IP + "/analyze_chords";
+    private static final long TOTAL_TIMEOUT_SECONDS = 300L;
 
     private static final OkHttpClient CLIENT =
             new OkHttpClient.Builder()
                     .connectTimeout(30, TimeUnit.SECONDS)
                     .writeTimeout(120, TimeUnit.SECONDS)
-                    .readTimeout(270, TimeUnit.SECONDS)
-                    .callTimeout(300, TimeUnit.SECONDS)
+                    .readTimeout(285, TimeUnit.SECONDS)
+                    .callTimeout(
+                            TOTAL_TIMEOUT_SECONDS,
+                            TimeUnit.SECONDS
+                    )
                     .retryOnConnectionFailure(true)
                     .build();
 
@@ -39,12 +44,11 @@ public class LibrosaAnalyzer implements ChordAnalyzerStrategy {
 
     private volatile BackendApiClient.RequestHandle activeRequest;
 
+    @Override
     public void cancel() {
         canceled.set(true);
 
-        BackendApiClient.RequestHandle request =
-                activeRequest;
-
+        BackendApiClient.RequestHandle request = activeRequest;
         activeRequest = null;
 
         if (request != null) {
@@ -97,10 +101,7 @@ public class LibrosaAnalyzer implements ChordAnalyzerStrategy {
                                     );
 
                                     callback.onError(
-                                            new Exception(
-                                                    "Connection to Librosa Server failed.",
-                                                    e
-                                            )
+                                            mapRequestFailure(e)
                                     );
                                 }
 
@@ -118,6 +119,15 @@ public class LibrosaAnalyzer implements ChordAnalyzerStrategy {
                                         }
 
                                         if (!r.isSuccessful()) {
+                                            if (r.code() == 504) {
+                                                callback.onError(
+                                                        new SocketTimeoutException(
+                                                                "Chord analysis timed out on the server"
+                                                        )
+                                                );
+                                                return;
+                                            }
+
                                             callback.onError(
                                                     new Exception(
                                                             "Server error: "
@@ -197,14 +207,20 @@ public class LibrosaAnalyzer implements ChordAnalyzerStrategy {
                                                 );
                                             }
 
-                                            if (!canceled.get()) {
+                                            if (
+                                                    !canceled.get()
+                                                            && !call.isCanceled()
+                                            ) {
                                                 callback.onComplete(
                                                         chords,
                                                         keyIndex
                                                 );
                                             }
                                         } catch (Exception e) {
-                                            if (canceled.get()) {
+                                            if (
+                                                    canceled.get()
+                                                            || call.isCanceled()
+                                            ) {
                                                 return;
                                             }
 
@@ -230,6 +246,13 @@ public class LibrosaAnalyzer implements ChordAnalyzerStrategy {
                                     return;
                                 }
 
+                                if (isTimeout(error)) {
+                                    callback.onError(
+                                            mapRequestFailure(error)
+                                    );
+                                    return;
+                                }
+
                                 Log.e(
                                         TAG,
                                         "Firebase authentication failed",
@@ -243,7 +266,9 @@ public class LibrosaAnalyzer implements ChordAnalyzerStrategy {
                                                 error
                                         )
                                 );
-                            }
+                            },
+                            TOTAL_TIMEOUT_SECONDS,
+                            TimeUnit.SECONDS
                     );
 
             activeRequest = handle;
@@ -261,5 +286,35 @@ public class LibrosaAnalyzer implements ChordAnalyzerStrategy {
                     )
             );
         }
+    }
+
+    private static Exception mapRequestFailure(
+            Throwable error
+    ) {
+        if (isTimeout(error)) {
+            return new Exception(
+                    "Chord analysis timed out. Please try again.",
+                    error
+            );
+        }
+
+        return new Exception(
+                "Connection to Librosa server failed.",
+                error
+        );
+    }
+
+    private static boolean isTimeout(Throwable error) {
+        Throwable current = error;
+
+        while (current != null) {
+            if (current instanceof SocketTimeoutException) {
+                return true;
+            }
+
+            current = current.getCause();
+        }
+
+        return false;
     }
 }

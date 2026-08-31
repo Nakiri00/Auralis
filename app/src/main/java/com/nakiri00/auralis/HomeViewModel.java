@@ -33,7 +33,7 @@ public class HomeViewModel extends AndroidViewModel {
     private final YoutubeRepository youtubeRepository = new YoutubeRepository();
     private final AudioAnalysisRepository analysisRepository =
             new AudioAnalysisRepository();
-    private final HistoryRepository historyRepository = new HistoryRepository();
+    private final HistoryRepository historyRepository;
     private final MutableLiveData<Boolean> isLoading = new MutableLiveData<>(
             false
     );
@@ -96,8 +96,15 @@ public class HomeViewModel extends AndroidViewModel {
     private volatile String activeTemporaryAnalysisPath;
     private volatile String activeHistoryAudioPath;
 
-    public HomeViewModel(@NonNull Application application) {
+    public HomeViewModel(
+            @NonNull Application application
+    ) {
         super(application);
+
+        historyRepository =
+                new HistoryRepository(
+                        application.getApplicationContext()
+                );
     }
     public LiveData<Boolean> getIsLoading() {
         return isLoading;
@@ -163,6 +170,11 @@ public class HomeViewModel extends AndroidViewModel {
     public String getCurrentHistoryId() {
         return currentHistoryId;
     }
+
+    private final AtomicLong fileImportOperationId =
+            new AtomicLong(0);
+
+    private volatile File pendingHistoryAudioDraft;
 
 
 //    private List<ChordTimestamp> postProcess(List<ChordTimestamp> raw) {
@@ -321,61 +333,162 @@ public class HomeViewModel extends AndroidViewModel {
     }
 
     // ─── File Processing ────────────────────────────────────────────────────
-    public void processAudioFile(Uri uri, String customTitle) {
+    public void processAudioFile(
+            Uri uri,
+            String customTitle
+    ) {
+        long importOperationId =
+                fileImportOperationId
+                        .incrementAndGet();
+
+        cancelActiveBackendRequests(false);
+        releaseMediaPlayer();
+        discardPendingHistoryAudioDraft();
+
         new Thread(() -> {
-            File destination = null;
+            File draft = null;
 
             try {
-                Context context = getApplication().getApplicationContext();
-                String originalFileName = getFileNameFromUri(context, uri);
+                Context context =
+                        getApplication()
+                                .getApplicationContext();
 
-                if (originalFileName == null || originalFileName.trim().isEmpty()) {
-                    originalFileName = "audio_" + System.currentTimeMillis() + ".mp3";
+                String originalFileName =
+                        getFileNameFromUri(
+                                context,
+                                uri
+                        );
+
+                if (
+                        originalFileName == null
+                                || originalFileName
+                                .trim()
+                                .isEmpty()
+                ) {
+                    originalFileName =
+                            "audio_"
+                                    + System.currentTimeMillis()
+                                    + ".mp3";
                 }
 
-                String historyId = HistoryIdentity.newId();
-                String extension = resolveAudioExtension(originalFileName);
-                destination = HistoryAudioStorage.createDestination(context, historyId, originalFileName);
+                String historyId =
+                        HistoryIdentity.newId();
 
-                InputStream openedInput = context.getContentResolver().openInputStream(uri);
+                draft =
+                        HistoryAudioStorage.createDraft(
+                                context,
+                                historyId,
+                                originalFileName
+                        );
+
+                InputStream openedInput =
+                        context
+                                .getContentResolver()
+                                .openInputStream(uri);
+
                 if (openedInput == null) {
-                    throw new IOException("Unable to open selected audio");
+                    throw new IOException(
+                            "Unable to open selected audio"
+                    );
                 }
 
-                // Gunakan try-with-resources untuk otomatis menutup stream
-                try (InputStream input = openedInput;
-                     FileOutputStream output = new FileOutputStream(destination)) {
+                try (
+                        InputStream input =
+                                openedInput;
 
-                    byte[] buffer = new byte[8 * 1024];
-                    int bytesRead;
+                        FileOutputStream output =
+                                new FileOutputStream(
+                                        draft
+                                )
+                ) {
+                    byte[] buffer =
+                            new byte[16 * 1024];
+
                     long totalBytes = 0;
+                    int bytesRead;
 
-                    while ((bytesRead = input.read(buffer)) != -1) {
-                        output.write(buffer, 0, bytesRead);
+                    while (
+                            (bytesRead = input.read(buffer)) != -1
+                    ) {
+                        if (
+                                fileImportOperationId.get()
+                                        != importOperationId
+                        ) {
+                            throw new IOException(
+                                    "Audio import was replaced"
+                            );
+                        }
+
+                        output.write(
+                                buffer,
+                                0,
+                                bytesRead
+                        );
+
                         totalBytes += bytesRead;
                     }
 
+                    output.flush();
+                    output.getFD().sync();
+
                     if (totalBytes == 0) {
-                        throw new IOException("Selected audio is empty");
+                        throw new IOException(
+                                "Selected audio is empty"
+                        );
                     }
                 }
 
-                String resolvedTitle = (customTitle != null && !customTitle.trim().isEmpty())
-                        ? customTitle.trim()
-                        : originalFileName;
+                if (
+                        fileImportOperationId.get()
+                                != importOperationId
+                ) {
+                    HistoryAudioStorage.discardDraft(
+                            context,
+                            draft
+                    );
+                    return;
+                }
 
-                File storedFile = destination;
+                String resolvedTitle =
+                        customTitle != null
+                                && !customTitle.trim().isEmpty()
+                                ? customTitle.trim()
+                                : originalFileName;
 
-                // Update UI/State di Main Thread
+                final File storedDraft =
+                        draft;
+
+                pendingHistoryAudioDraft =
+                        storedDraft;
+
                 handler.post(() -> {
-                    currentHistoryId = historyId;
-                    audioFilePath = destination.getAbsolutePath();
-                    audioTitle = resolvedTitle;
+                    if (
+                            fileImportOperationId.get()
+                                    != importOperationId
+                    ) {
+                        discardPendingHistoryAudioDraft();
+                        return;
+                    }
+
+                    currentHistoryId =
+                            historyId;
+
+                    audioFilePath =
+                            storedDraft.getAbsolutePath();
+
+                    audioTitle =
+                            resolvedTitle;
 
                     detectedChords.clear();
-                    setDetectedChords(new ArrayList<>());
 
-                    upcomingChords.setValue(new ArrayList<>());
+                    setDetectedChords(
+                            new ArrayList<>()
+                    );
+
+                    upcomingChords.setValue(
+                            new ArrayList<>()
+                    );
+
                     currentChordDisplay.setValue("-");
                     detectedKeyText.setValue("");
                     capoSuggestionText.setValue("");
@@ -383,53 +496,78 @@ public class HomeViewModel extends AndroidViewModel {
                     statusText.setValue(resolvedTitle);
                     fileLoaded.setValue(true);
 
-                    setupAudioPlayer(audioFilePath, audioTitle);
+                    setupAudioPlayer(
+                            audioFilePath,
+                            audioTitle
+                    );
                 });
 
             } catch (Exception error) {
-                Log.e(TAG, "Error processing file", error);
+                Log.e(
+                        TAG,
+                        "Error processing file",
+                        error
+                );
 
-                // Cleanup: Hapus file jika proses gagal di tengah jalan
-                if (destination != null && destination.exists() && !destination.delete()) {
-                    Log.w(TAG, "Failed to delete incomplete file");
+                Context context =
+                        getApplication()
+                                .getApplicationContext();
+
+                if (draft != null) {
+                    HistoryAudioStorage.discardDraft(
+                            context,
+                            draft
+                    );
                 }
 
-                handler.post(() ->
-                        toastMessage.setValue("Gagal memproses file: " + error.getMessage())
-                );
+                if (
+                        fileImportOperationId.get()
+                                == importOperationId
+                ) {
+                    handler.post(() ->
+                            toastMessage.setValue(
+                                    "Gagal memproses file: "
+                                            + error.getMessage()
+                            )
+                    );
+                }
             }
         }, "auralis-file-import").start();
     }
-    private String resolveAudioExtension(
-            String fileName
+
+    private synchronized void discardPendingHistoryAudioDraft() {
+        File draft =
+                pendingHistoryAudioDraft;
+
+        pendingHistoryAudioDraft = null;
+
+        if (draft == null) {
+            return;
+        }
+
+        HistoryAudioStorage.discardDraft(
+                getApplication()
+                        .getApplicationContext(),
+                draft
+        );
+    }
+
+    private synchronized void detachDraftForSave(
+            File draft
     ) {
-        if (fileName == null) {
-            return ".mp3";
+        if (
+                draft != null
+                        && pendingHistoryAudioDraft != null
+                        && pendingHistoryAudioDraft.equals(
+                        draft
+                )
+        ) {
+            /*
+             * Draft sekarang dimiliki callback save,
+             * sehingga pemilihan file baru tidak menghapusnya.
+             */
+            pendingHistoryAudioDraft = null;
         }
-
-        String lower =
-                fileName.toLowerCase(
-                        java.util.Locale.US
-                );
-
-        String[] supportedExtensions = {
-                ".mp3",
-                ".wav",
-                ".flac",
-                ".m4a",
-                ".aac",
-                ".ogg",
-                ".mp4"
-        };
-
-        for (String extension
-                : supportedExtensions) {
-            if (lower.endsWith(extension)) {
-                return extension;
-            }
-        }
-
-        return ".mp3";
     }
     private String getFileNameFromUri(Context ctx, Uri uri) {
         String result = null;
@@ -606,6 +744,7 @@ public class HomeViewModel extends AndroidViewModel {
                     item.getChordName();
             else break;
         }
+
         return result;
     }
 
@@ -810,22 +949,6 @@ public class HomeViewModel extends AndroidViewModel {
                         List<ChordTimestamp> formattedChords =
                                 new ArrayList<>();
 
-                        StringBuilder text = new StringBuilder();
-
-                        text.append(
-                                title != null
-                                        ? title
-                                        : "Audio"
-                        ).append("\n");
-
-                        text.append("KEY: ")
-                                .append(keyName)
-                                .append("\n");
-
-                        text.append("CAPO: ")
-                                .append(capoAdvice)
-                                .append("\n");
-
                         for (ChordTimestamp item : results) {
                             String name = item.getChordName();
 
@@ -857,23 +980,30 @@ public class HomeViewModel extends AndroidViewModel {
                                             chordWithRoman
                                     )
                             );
-
-                            text.append(
-                                    String.format(
-                                            java.util.Locale.US,
-                                            "[%02d:%02d] %s\n",
-                                            (int) (
-                                                    item.getTimeSeconds()
-                                                            / 60
-                                            ),
-                                            (int) (
-                                                    item.getTimeSeconds()
-                                                            % 60
-                                            ),
-                                            chordWithRoman
-                                    )
-                            );
                         }
+                        final Context appContext =
+                                getApplication()
+                                        .getApplicationContext();
+
+                        final File draftForSave =
+                                historyAudioPath != null
+                                        && !historyAudioPath.trim().isEmpty()
+                                        ? new File(historyAudioPath)
+                                        : null;
+
+                        final String managedAudioFileName =
+                                HistoryAudioStorage.getManagedFileName(
+                                        appContext,
+                                        historyAudioPath
+                                );
+
+                        final boolean shouldCommitDraft =
+                                draftForSave != null
+                                        && HistoryAudioStorage.isDraftFile(
+                                        appContext,
+                                        draftForSave
+                                );
+
 
                         cleanupTemporaryAnalysisFile(
                                 fileToAnalyze,
@@ -912,7 +1042,9 @@ public class HomeViewModel extends AndroidViewModel {
                             );
 
                             detectedKeyText.setValue(
-                                    "Key: " + keyName
+                                    keyDetected
+                                            ? "Key: " + keyName
+                                            : ""
                             );
 
                             capoSuggestionText.setValue(
@@ -926,15 +1058,21 @@ public class HomeViewModel extends AndroidViewModel {
                                             currentHistoryId
                                     );
 
-                            currentHistoryId = historyId;
+                            currentHistoryId =
+                                    historyId;
+
+                            if (shouldCommitDraft) {
+                                detachDraftForSave(
+                                        draftForSave
+                                );
+                            }
 
                             historyRepository.saveOrUpdateHistory(
                                     historyId,
                                     title,
-                                    audioFileName,
-                                    sb.toString(),
+                                    managedAudioFileName,
                                     new ArrayList<>(
-                                            detectedChords
+                                            formattedChords
                                     ),
                                     keyIndex,
                                     new HistoryRepository.OnSaveListener() {
@@ -948,6 +1086,39 @@ public class HomeViewModel extends AndroidViewModel {
                                                             ? "History updated"
                                                             : "History created"
                                             );
+
+                                            if (!shouldCommitDraft) {
+                                                return;
+                                            }
+
+                                            File committedFile =
+                                                    HistoryAudioStorage.commitDraft(
+                                                            appContext,
+                                                            draftForSave
+                                                    );
+
+                                            if (committedFile == null) {
+                                                Log.e(
+                                                        TAG,
+                                                        "History was saved, but "
+                                                                + "the audio draft could "
+                                                                + "not be committed"
+                                                );
+
+                                                toastMessage.postValue(
+                                                        "History tersimpan, tetapi "
+                                                                + "audio lokal gagal "
+                                                                + "diselesaikan."
+                                                );
+
+                                                return;
+                                            }
+
+                                            if (isCurrentAnalysis(operationId)) {
+                                                audioFilePath =
+                                                        committedFile
+                                                                .getAbsolutePath();
+                                            }
                                         }
 
                                         @Override
@@ -959,6 +1130,29 @@ public class HomeViewModel extends AndroidViewModel {
                                                     "Failed to save history",
                                                     error
                                             );
+
+                                            if (shouldCommitDraft) {
+                                                HistoryAudioStorage.discardDraft(
+                                                        appContext,
+                                                        draftForSave
+                                                );
+                                            }
+
+                                            if (isCurrentAnalysis(operationId)) {
+                                                handler.post(() -> {
+                                                    releaseMediaPlayer();
+
+                                                    audioFilePath = null;
+
+                                                    fileLoaded.setValue(false);
+                                                    playerReady.setValue(false);
+
+                                                    toastMessage.setValue(
+                                                            "Analisis selesai, tetapi "
+                                                                    + "History gagal disimpan."
+                                                    );
+                                                });
+                                            }
                                         }
                                     }
                             );
@@ -1077,18 +1271,22 @@ public class HomeViewModel extends AndroidViewModel {
             String historyId,
             String audioPath,
             String title,
-            String savedChordData
+            List<ChordTimestamp> savedChords,
+            Integer savedKeyIndex
     ) {
+        fileImportOperationId.incrementAndGet();
+
+        cancelActiveBackendRequests(false);
+        discardPendingHistoryAudioDraft();
+
         currentHistoryId =
-                HistoryIdentity
-                        .normalizeOrCreate(
-                                historyId
-                        );
+                HistoryIdentity.normalizeOrCreate(
+                        historyId
+                );
 
         boolean hasLocalAudio =
                 audioPath != null
-                        && new File(audioPath)
-                        .isFile();
+                        && new File(audioPath).isFile();
 
         audioFilePath =
                 hasLocalAudio
@@ -1103,32 +1301,79 @@ public class HomeViewModel extends AndroidViewModel {
         stopChordSync();
         releaseMediaPlayer();
 
+        List<ChordTimestamp> safeChords =
+                sanitizeSavedChords(
+                        savedChords
+                );
+
         detectedChords.clear();
-        setDetectedChords(new ArrayList<>());
-        upcomingChords.setValue(new ArrayList<>());
+        detectedChords.addAll(
+                safeChords
+        );
+
+        setDetectedChords(
+                new ArrayList<>(
+                        safeChords
+                )
+        );
+
+        upcomingChords.setValue(
+                new ArrayList<>()
+        );
+
         chordProgress.setValue(0);
-        currentChordDisplay.setValue("-");
-        detectedKeyText.setValue("");
-        capoSuggestionText.setValue("");
 
-        if (
-                savedChordData != null
-                        && !savedChordData.isEmpty()
-        ) {
-            parseAndLoadChords(
-                    savedChordData
-            );
+        int normalizedKeyIndex =
+                savedKeyIndex != null
+                        && KeyDetector.isValidKeyIndex(
+                        savedKeyIndex
+                )
+                        ? savedKeyIndex
+                        : KeyDetector.UNKNOWN_KEY_INDEX;
 
-            statusText.setValue(
-                    hasLocalAudio
-                            ? "Data dimuat dari History."
-                            : "Hasil chord dimuat tanpa audio."
-            );
-        } else {
-            statusText.setValue(
-                    "Tidak ada hasil chord."
-            );
-        }
+        boolean keyDetected =
+                KeyDetector.isValidKeyIndex(
+                        normalizedKeyIndex
+                );
+
+        detectedKeyText.setValue(
+                keyDetected
+                        ? "Key: "
+                        + KeyDetector.getKeyName(
+                        normalizedKeyIndex
+                )
+                        : ""
+        );
+
+        capoSuggestionText.setValue(
+                keyDetected
+                        ? CapoSuggester.suggest(
+                        normalizedKeyIndex
+                )
+                        : ""
+        );
+
+        currentChordDisplay.setValue(
+                safeChords.isEmpty()
+                        ? "No chord data found."
+                        : "Data Loaded ("
+                        + safeChords.size()
+                        + " Chords)"
+        );
+
+        boolean hasStructuredResult =
+                !safeChords.isEmpty()
+                        || keyDetected;
+
+        statusText.setValue(
+                hasStructuredResult
+                        ? (
+                        hasLocalAudio
+                                ? "Data dimuat dari History."
+                                : "Hasil chord dimuat tanpa audio."
+                )
+                        : "Tidak ada hasil chord."
+        );
 
         fileLoaded.setValue(
                 hasLocalAudio
@@ -1149,52 +1394,49 @@ public class HomeViewModel extends AndroidViewModel {
         }
     }
 
-    private void parseAndLoadChords(String savedData) {
-        detectedChords.clear();
-        int count = 0;
+    private List<ChordTimestamp> sanitizeSavedChords(
+            List<ChordTimestamp> source
+    ) {
+        List<ChordTimestamp> result =
+                new ArrayList<>();
 
-        String parsedKey = "";
-        String parsedCapo = "";
-
-        for (String line : savedData.split("\n")) {
-            line = line.trim();
-
-            if (line.startsWith("KEY:")) {
-                parsedKey = line.substring(4).trim();
-            } else if (line.startsWith("CAPO:")) {
-                parsedCapo = line.substring(5).trim();
-            }
-            else if (line.startsWith("[") && line.contains("]")) {
-                try {
-                    int bracket = line.indexOf("]");
-                    String[] parts = line.substring(1, bracket).split(":");
-                    if (parts.length == 2) {
-                        double totalSec =
-                                Integer.parseInt(parts[0]) * 60 +
-                                        Integer.parseInt(parts[1]);
-                        detectedChords.add(
-                                new ChordTimestamp(
-                                        totalSec,
-                                        line.substring(bracket + 1).trim()
-                                )
-                        );
-                        count++;
-                    }
-                } catch (Exception e) {
-                    Log.w(TAG, "Skipping line: " + line);
-                }
-            }
+        if (source == null) {
+            return result;
         }
 
-        setDetectedChords(new ArrayList<>(detectedChords));
-        currentChordDisplay.setValue(
-                count > 0
-                        ? "Data Loaded (" + count + " Chords)"
-                        : "No chord data found."
+        for (ChordTimestamp chord : source) {
+            if (chord == null) {
+                continue;
+            }
+
+            double time =
+                    chord.getTimeSeconds();
+
+            if (
+                    Double.isNaN(time)
+                            || Double.isInfinite(time)
+                            || time < 0
+            ) {
+                continue;
+            }
+
+            result.add(
+                    new ChordTimestamp(
+                            time,
+                            chord.getChordName()
+                    )
+            );
+        }
+
+        result.sort(
+                (first, second) ->
+                        Double.compare(
+                                first.getTimeSeconds(),
+                                second.getTimeSeconds()
+                        )
         );
 
-        detectedKeyText.setValue(!parsedKey.isEmpty() ? "Key: " + parsedKey : "");
-        capoSuggestionText.setValue(!parsedCapo.isEmpty() ? parsedCapo : "");
+        return result;
     }
 
     @Override

@@ -111,11 +111,11 @@ public class HistoryAdapter
                                         oldItem.getTitle(),
                                         newItem.getTitle()
                                 ) && Objects.equals(
-                                        oldItem.getFilePath(),
-                                        newItem.getFilePath()
+                                        oldItem.getAudioFileName(),
+                                        newItem.getAudioFileName()
                                 ) && Objects.equals(
-                                        oldItem.getResult(),
-                                        newItem.getResult()
+                                        oldItem.getChords(),
+                                        newItem.getChords()
                                 ) && Objects.equals(
                                         oldItem.getKeyIndex(),
                                         newItem.getKeyIndex()

@@ -1,4 +1,8 @@
 package com.nakiri00.auralis;
+import android.app.Application;
+
+import androidx.annotation.NonNull;
+import androidx.lifecycle.AndroidViewModel;
 
 import android.util.Log;
 import androidx.lifecycle.LiveData;
@@ -6,26 +10,45 @@ import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.ListenerRegistration;
+import com.google.firebase.auth.FirebaseUser;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.io.File;
 
-public class HistoryViewModel extends ViewModel {
+public class HistoryViewModel extends AndroidViewModel {
 
     private static final String TAG = "HistoryViewModel";
     private static final int PAGE_SIZE = 5;
     private static final int SORT_DATE = 0;
     private static final int SORT_TITLE = 1;
 
+
     // Repository
-    private final HistoryRepository historyRepository = new HistoryRepository();
+    private final HistoryRepository historyRepository;
+
+    public HistoryViewModel(
+            @NonNull Application application
+    ) {
+        super(application);
+
+        historyRepository =
+                new HistoryRepository(
+                        application.getApplicationContext()
+                );
+
+        firebaseAuth =
+                FirebaseAuth.getInstance();
+    }
     private ListenerRegistration listenerRegistration;
 
     // Internal datasets
-    private final List<ChordHistory> filteredList = new ArrayList<>();
-    private final List<String> filteredDocIds = new ArrayList<>();
+    private final List<ChordHistory> masterList =
+            new ArrayList<>();
+
+    private final List<ChordHistory> filteredList =
+            new ArrayList<>();
 
     // Filter / sort / pagination state
     private int currentPage = 0;
@@ -50,12 +73,31 @@ public class HistoryViewModel extends ViewModel {
     }
 
     // ─── Listening ─────────────────────────────────────────────────────────
+    private final FirebaseAuth firebaseAuth;
 
-    /** Dipanggil dari Fragment di onViewCreated. Guard agar tidak double-register. */
-    public void startListening() {
-        if (listenerRegistration != null) return;
-        String uid = FirebaseAuth.getInstance().getUid();
-        if (uid == null) return;
+    private boolean authListenerRegistered;
+    private String listeningUid;
+
+    private void startFirestoreListener(
+            String uid
+    ) {
+        if (
+                uid == null
+                        || uid.trim().isEmpty()
+        ) {
+            return;
+        }
+
+        if (
+                listenerRegistration != null
+                        && uid.equals(listeningUid)
+        ) {
+            return;
+        }
+
+        stopFirestoreListener();
+
+        listeningUid = uid;
 
         listenerRegistration =
                 historyRepository.listenToHistory(
@@ -66,25 +108,95 @@ public class HistoryViewModel extends ViewModel {
                                     List<ChordHistory> items
                             ) {
                                 masterList.clear();
-                                masterList.addAll(items);
 
-                                applyFiltersAndPaginate(false);
+                                if (items != null) {
+                                    masterList.addAll(
+                                            items
+                                    );
+                                }
+
+                                applyFiltersAndPaginate(
+                                        false
+                                );
                             }
 
                             @Override
-                            public void onError(Exception e) {
+                            public void onError(
+                                    Exception error
+                            ) {
                                 Log.e(
                                         TAG,
                                         "Firestore snapshot error",
-                                        e
+                                        error
                                 );
 
                                 toastMessage.postValue(
-                                        "Failed to load history"
+                                        "History cloud sementara "
+                                                + "tidak tersedia"
                                 );
                             }
                         }
                 );
+    }
+
+    private void stopFirestoreListener() {
+        if (listenerRegistration != null) {
+            listenerRegistration.remove();
+            listenerRegistration = null;
+        }
+
+        listeningUid = null;
+    }
+
+    private final FirebaseAuth.AuthStateListener authStateListener =
+            auth -> {
+                FirebaseUser user =
+                        auth.getCurrentUser();
+
+                if (user == null) {
+                    stopFirestoreListener();
+
+                    /*
+                     * Jangan tampilkan data dari akun anonim lama.
+                     */
+                    masterList.clear();
+                    applyFiltersAndPaginate(true);
+                    return;
+                }
+
+                startFirestoreListener(
+                        user.getUid()
+                );
+            };
+
+    /** Dipanggil dari Fragment di onViewCreated. Guard agar tidak double-register. */
+    public void startListening() {
+        if (!authListenerRegistered) {
+            authListenerRegistered = true;
+
+            /*
+             * Listener langsung menerima kondisi auth saat ini,
+             * termasuk null ketika aplikasi sedang offline.
+             */
+            firebaseAuth.addAuthStateListener(
+                    authStateListener
+            );
+        }
+
+        FirebaseUser currentUser =
+                firebaseAuth.getCurrentUser();
+
+        if (currentUser != null) {
+            startFirestoreListener(
+                    currentUser.getUid()
+            );
+        } else {
+            /*
+             * History cloud kosong sementara, tetapi halaman
+             * Home dan Library tetap dapat digunakan.
+             */
+            applyFiltersAndPaginate(false);
+        }
     }
 
     // ─── User Actions ───────────────────────────────────────────────────────
@@ -327,10 +439,16 @@ public class HistoryViewModel extends ViewModel {
 
     @Override
     protected void onCleared() {
-        super.onCleared();
-        if (listenerRegistration != null) {
-            listenerRegistration.remove();
-            listenerRegistration = null;
+        stopFirestoreListener();
+
+        if (authListenerRegistered) {
+            firebaseAuth.removeAuthStateListener(
+                    authStateListener
+            );
+
+            authListenerRegistered = false;
         }
+
+        super.onCleared();
     }
 }

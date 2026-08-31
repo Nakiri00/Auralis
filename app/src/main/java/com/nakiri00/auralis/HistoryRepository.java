@@ -6,39 +6,55 @@ import com.google.firebase.Timestamp;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.Query;
-import com.google.firebase.firestore.FieldValue;
+import android.content.Context;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.io.File;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.ArrayList;
-import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class HistoryRepository {
 
+    private final Context applicationContext;
+
+    public HistoryRepository(
+            Context context
+    ) {
+        if (context == null) {
+            throw new IllegalArgumentException(
+                    "Context is required"
+            );
+        }
+
+        applicationContext =
+                context.getApplicationContext();
+    }
     private static final String TAG =
             "HistoryRepository";
 
     public interface OnSaveListener {
         void onSuccess(boolean isUpdate);
-        void onError(Exception e);
+
+        void onError(Exception error);
     }
 
     public interface HistoryLoadCallback {
-        void onUpdate(
-                List<ChordHistory> items
-        );
+        void onUpdate(List<ChordHistory> items);
 
-        void onError(Exception e);
+        void onError(Exception error);
     }
 
     public interface OnDeleteListener {
         void onSuccess();
-        void onError(Exception e);
+
+        void onError(Exception error);
     }
 
     public ListenerRegistration listenToHistory(
@@ -55,7 +71,7 @@ public class HistoryRepository {
                         Query.Direction.DESCENDING
                 )
                 .addSnapshotListener(
-                        (value, error) -> {
+                        (snapshot, error) -> {
                             if (error != null) {
                                 Log.e(
                                         TAG,
@@ -70,36 +86,65 @@ public class HistoryRepository {
                             List<ChordHistory> items =
                                     new ArrayList<>();
 
-                            if (value != null) {
+                            if (snapshot != null) {
                                 for (
                                         DocumentSnapshot document
-                                        : value.getDocuments()
+                                        : snapshot.getDocuments()
                                 ) {
                                     ChordHistory history =
                                             document.toObject(
                                                     ChordHistory.class
                                             );
 
-                                    if (history != null) {
-                                        /*
-                                         * Firestore document ID menjadi
-                                         * identity object.
-                                         *
-                                         * Ini juga otomatis memigrasikan
-                                         * history lama saat dibaca.
-                                         */
-                                        history.setHistoryId(
-                                                document.getId()
-                                        );
+                                    if (history == null) {
+                                        continue;
+                                    }
 
-                                        migrateLegacyFilePath(
-                                                document,
-                                                history
-                                        );
+                                    history.setHistoryId(
+                                            document.getId()
+                                    );
 
-                                        items.add(history);
+                                    migrateLegacyFields(
+                                            document,
+                                            history
+                                    );
+
+                                    items.add(history);
+                                }
+                            }
+
+                            boolean authoritativeSnapshot =
+                                    snapshot != null
+                                            && !snapshot.getMetadata()
+                                            .isFromCache()
+                                            && !snapshot.getMetadata()
+                                            .hasPendingWrites();
+
+                            if (authoritativeSnapshot) {
+                                Set<String> referencedFiles =
+                                        new HashSet<>();
+
+                                for (ChordHistory item : items) {
+                                    String fileName =
+                                            item.getAudioFileName();
+
+                                    if (
+                                            fileName != null
+                                                    && !fileName
+                                                    .trim()
+                                                    .isEmpty()
+                                    ) {
+                                        referencedFiles.add(
+                                                fileName
+                                        );
                                     }
                                 }
+
+                                HistoryAudioStorage
+                                        .reconcileWithHistory(
+                                                applicationContext,
+                                                referencedFiles
+                                        );
                             }
 
                             callback.onUpdate(items);
@@ -107,18 +152,59 @@ public class HistoryRepository {
                 );
     }
 
-    private void migrateLegacyFilePath(
+    /**
+     * Migrasi otomatis:
+     *
+     * 1. filePath absolut menjadi audioFileName.
+     * 2. result string menjadi chords + keyIndex.
+     * 3. result dihapus setelah migrasi berhasil.
+     */
+    private void migrateLegacyFields(
             DocumentSnapshot document,
             ChordHistory history
+    ) {
+        Map<String, Object> updates =
+                new HashMap<>();
+
+        migrateLegacyAudioPath(
+                document,
+                history,
+                updates
+        );
+
+        migrateLegacyResult(
+                document,
+                history,
+                updates
+        );
+
+        if (updates.isEmpty()) {
+            return;
+        }
+
+        document.getReference()
+                .update(updates)
+                .addOnFailureListener(error ->
+                        Log.e(
+                                TAG,
+                                "Failed to migrate history "
+                                        + document.getId(),
+                                error
+                        )
+                );
+    }
+
+    private void migrateLegacyAudioPath(
+            DocumentSnapshot document,
+            ChordHistory history,
+            Map<String, Object> updates
     ) {
         if (!document.contains("filePath")) {
             return;
         }
 
         String legacyPath =
-                document.getString(
-                        "filePath"
-                );
+                document.getString("filePath");
 
         String safeFileName =
                 HistoryAudioStorage
@@ -133,47 +219,131 @@ public class HistoryRepository {
             history.setAudioFileName(
                     safeFileName
             );
-        }
 
-        Map<String, Object> updates =
-                new HashMap<>();
-
-        updates.put(
-                "filePath",
-                FieldValue.delete()
-        );
-
-        if (safeFileName != null) {
             updates.put(
                     "audioFileName",
                     safeFileName
             );
         }
 
-        document.getReference()
-                .update(updates)
-                .addOnFailureListener(error ->
-                        Log.e(
-                                TAG,
-                                "Failed to migrate legacy "
-                                        + "audio path for "
-                                        + document.getId(),
-                                error
-                        )
-                );
+        updates.put(
+                "filePath",
+                FieldValue.delete()
+        );
+    }
+
+    private void migrateLegacyResult(
+            DocumentSnapshot document,
+            ChordHistory history,
+            Map<String, Object> updates
+    ) {
+        List<ChordTimestamp> structuredChords =
+                history.getChords();
+
+        Integer structuredKeyIndex =
+                history.getKeyIndex();
+
+        boolean originallyHadChords =
+                structuredChords != null;
+
+        boolean originallyHadKeyIndex =
+                structuredKeyIndex != null;
+
+        String legacyResult =
+                document.getString("result");
+
+        HistoryLegacyParser.ParsedHistory parsed =
+                null;
+
+        if (
+                legacyResult != null
+                        && (
+                        !originallyHadChords
+                                || !originallyHadKeyIndex
+                )
+        ) {
+            parsed =
+                    HistoryLegacyParser.parse(
+                            legacyResult
+                    );
+        }
+
+        if (!originallyHadChords) {
+            structuredChords =
+                    parsed != null
+                            ? parsed.getChords()
+                            : new ArrayList<>();
+
+            history.setChords(
+                    structuredChords
+            );
+
+            updates.put(
+                    "chords",
+                    new ArrayList<>(
+                            structuredChords
+                    )
+            );
+        }
+
+        if (!originallyHadKeyIndex) {
+            structuredKeyIndex =
+                    parsed != null
+                            ? parsed.getKeyIndex()
+                            : KeyDetector.UNKNOWN_KEY_INDEX;
+
+            history.setKeyIndex(
+                    structuredKeyIndex
+            );
+
+            updates.put(
+                    "keyIndex",
+                    structuredKeyIndex
+            );
+        }
+
+        if (legacyResult == null) {
+            return;
+        }
+
+        boolean alreadyStructured =
+                originallyHadChords
+                        && originallyHadKeyIndex;
+
+        boolean migrationWasSafe =
+                parsed != null
+                        && parsed.isSafeToDeleteSource();
+
+        if (
+                alreadyStructured
+                        || migrationWasSafe
+        ) {
+            updates.put(
+                    "result",
+                    FieldValue.delete()
+            );
+        } else {
+            Log.w(
+                    TAG,
+                    "Legacy result retained because "
+                            + "some lines could not be parsed: "
+                            + document.getId()
+            );
+        }
     }
 
     public void saveOrUpdateHistory(
             String historyId,
             String title,
             String audioFileName,
-            String resultText,
             List<ChordTimestamp> chords,
             int keyIndex,
             OnSaveListener listener
     ) {
         String uid =
-                FirebaseAuth.getInstance().getUid();
+                FirebaseAuth
+                        .getInstance()
+                        .getUid();
 
         if (uid == null) {
             notifySaveError(
@@ -204,21 +374,21 @@ public class HistoryRepository {
                 new ChordHistory(
                         resolvedHistoryId,
                         title != null
+                                && !title.trim().isEmpty()
                                 ? title
                                 : "Audio",
                         audioFileName,
-                        resultText,
                         chords != null
                                 ? new ArrayList<>(chords)
                                 : new ArrayList<>(),
-                        keyIndex,
-                        new Timestamp(new Date())
+                        KeyDetector.isValidKeyIndex(
+                                keyIndex
+                        )
+                                ? keyIndex
+                                : KeyDetector.UNKNOWN_KEY_INDEX,
+                        Timestamp.now()
                 );
 
-        /*
-         * Transaction membuat pengecekan exists dan write
-         * berjalan atomik.
-         */
         firestore.runTransaction(transaction -> {
                     DocumentSnapshot snapshot =
                             transaction.get(
@@ -228,6 +398,11 @@ public class HistoryRepository {
                     boolean isUpdate =
                             snapshot.exists();
 
+                    /*
+                     * set() tanpa merge mengganti dokumen lama.
+                     * Karena ChordHistory tidak lagi memiliki
+                     * field result, field tersebut ikut hilang.
+                     */
                     transaction.set(
                             historyDocument,
                             history
@@ -246,7 +421,9 @@ public class HistoryRepository {
                     );
 
                     if (listener != null) {
-                        listener.onSuccess(isUpdate);
+                        listener.onSuccess(
+                                isUpdate
+                        );
                     }
                 })
                 .addOnFailureListener(error -> {
@@ -274,13 +451,12 @@ public class HistoryRepository {
                 uid == null
                         || uid.trim().isEmpty()
         ) {
-            if (listener != null) {
-                listener.onError(
-                        new IllegalArgumentException(
-                                "User ID is required"
-                        )
-                );
-            }
+            notifyDeleteError(
+                    listener,
+                    new IllegalArgumentException(
+                            "User ID is required"
+                    )
+            );
             return;
         }
 
@@ -289,13 +465,12 @@ public class HistoryRepository {
                         historyId
                 )
         ) {
-            if (listener != null) {
-                listener.onError(
-                        new IllegalArgumentException(
-                                "History ID is invalid"
-                        )
-                );
-            }
+            notifyDeleteError(
+                    listener,
+                    new IllegalArgumentException(
+                            "History ID is invalid"
+                    )
+            );
             return;
         }
 
@@ -322,34 +497,11 @@ public class HistoryRepository {
                             error
                     );
 
-                    if (listener != null) {
-                        listener.onError(error);
-                    }
+                    notifyDeleteError(
+                            listener,
+                            error
+                    );
                 });
-    }
-
-    private void deleteLocalAudio(
-            String filePath
-    ) {
-        if (
-                filePath == null
-                        || filePath.trim().isEmpty()
-        ) {
-            return;
-        }
-
-        File file = new File(filePath);
-
-        if (
-                file.exists()
-                        && !file.delete()
-        ) {
-            Log.w(
-                    TAG,
-                    "Failed to delete local audio: "
-                            + file.getAbsolutePath()
-            );
-        }
     }
 
     private void notifySaveError(

@@ -36,8 +36,6 @@ public class MainActivity extends AppCompatActivity {
 
         viewModel = new ViewModelProvider(this).get(MainViewModel.class);
 
-        binding.navMenu.setEnabled(false);
-
         ViewCompat.setOnApplyWindowInsetsListener(
             findViewById(R.id.main),
             (v, insets) -> {
@@ -48,28 +46,34 @@ public class MainActivity extends AppCompatActivity {
                 return insets;
             }
         );
+        setupFragments();
 
         // Observe auth state dari ViewModel
         viewModel
-            .getAuthState()
-            .observe(this, state -> {
-                switch (state) {
-                    case SUCCESS:
-                        setupFragments();
-                        break;
-                    case FAILED:
-                        Toast.makeText(
-                            this,
-                            "Database Login Failed",
-                            Toast.LENGTH_SHORT
-                        ).show();
-                        break;
-                    case LOADING:
-                        break;
-                }
-            });
+                .getAuthState()
+                .observe(this, state -> {
+                    switch (state) {
+                        case SUCCESS:
+                            /*
+                             * HistoryViewModel memiliki AuthStateListener
+                             * sendiri dan akan mulai sinkronisasi otomatis.
+                             */
+                            break;
 
-        viewModel.ensureAuthenticated();
+                        case FAILED:
+                            Toast.makeText(
+                                    this,
+                                    "Mode offline aktif. "
+                                            + "History cloud dan fitur "
+                                            + "online sementara tidak tersedia.",
+                                    Toast.LENGTH_LONG
+                            ).show();
+                            break;
+
+                        case LOADING:
+                            break;
+                    }
+                });
     }
 
     private void setupFragments() {
@@ -85,10 +89,24 @@ public class MainActivity extends AppCompatActivity {
             libraryFragment = new LibraryFragment();
 
             fm.beginTransaction()
-                    .add(R.id.main_frame, homeFragment, "HOME")
-                    .add(R.id.main_frame, historyFragment, "HISTORY").hide(historyFragment)
-                    .add(R.id.main_frame, libraryFragment, "LIBRARY").hide(libraryFragment)
-                    .commit();
+                    .add(
+                            R.id.main_frame,
+                            homeFragment,
+                            "HOME"
+                    )
+                    .add(
+                            R.id.main_frame,
+                            historyFragment,
+                            "HISTORY"
+                    )
+                    .hide(historyFragment)
+                    .add(
+                            R.id.main_frame,
+                            libraryFragment,
+                            "LIBRARY"
+                    )
+                    .hide(libraryFragment)
+                    .commitNow();
 
             activeFragment = homeFragment;
         } else {
@@ -129,9 +147,37 @@ public class MainActivity extends AppCompatActivity {
         activeFragment = target;
     }
 
-    public void playSongFromHistory(Bundle bundle) {
-        binding.navMenu.setSelectedItemId(R.id.home);
-        ((HomeFragment) homeFragment).loadHistoryData(bundle);
+    public void playSongFromHistory(
+            ChordHistory history,
+            String localAudioPath
+    ) {
+        if (
+                history == null
+                        || !(homeFragment instanceof HomeFragment)
+        ) {
+            return;
+        }
+
+        binding.navMenu.setSelectedItemId(
+                R.id.home
+        );
+
+        ((HomeFragment) homeFragment)
+                .loadHistoryData(
+                        history,
+                        localAudioPath
+                );
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+
+        /*
+         * Jika sebelumnya offline, autentikasi dicoba kembali
+         * ketika aplikasi dibuka atau kembali dari background.
+         */
+        viewModel.ensureAuthenticated();
     }
 
     @Override

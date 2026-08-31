@@ -4,16 +4,18 @@ import java.util.List;
 
 public class AudioAnalysisRepository {
 
-    private final Object remoteAnalyzerLock = new Object();
-    private LibrosaAnalyzer activeRemoteAnalyzer;
+    private final Object analyzerLock = new Object();
+
+    private ChordAnalyzerStrategy activeAnalyzer;
 
     public interface AnalysisCallback {
+
         void onComplete(
                 List<ChordTimestamp> results,
                 int keyIndex
         );
 
-        void onError(Exception e);
+        void onError(Exception exception);
     }
 
     public void analyze(
@@ -25,75 +27,73 @@ public class AudioAnalysisRepository {
 
         int sampleRate = 44100;
 
-        if (!isPremiumMode) {
-            new TarsosDSPAnalyzer().analyzeChords(
+        ChordAnalyzerStrategy analyzer = isPremiumMode
+                ? new LibrosaAnalyzer()
+                : new TarsosDSPAnalyzer();
+
+        synchronized (analyzerLock) {
+            activeAnalyzer = analyzer;
+        }
+
+        try {
+            analyzer.analyzeChords(
                     audioPath,
                     sampleRate,
-                    callback
+                    new AnalysisCallback() {
+                        @Override
+                        public void onComplete(
+                                List<ChordTimestamp> results,
+                                int keyIndex
+                        ) {
+                            if (!clearIfActive(analyzer)) {
+                                return;
+                            }
+
+                            callback.onComplete(
+                                    results,
+                                    keyIndex
+                            );
+                        }
+
+                        @Override
+                        public void onError(Exception exception) {
+                            if (!clearIfActive(analyzer)) {
+                                return;
+                            }
+
+                            callback.onError(exception);
+                        }
+                    }
             );
-            return;
+        } catch (Exception exception) {
+            if (clearIfActive(analyzer)) {
+                callback.onError(exception);
+            }
         }
-
-        LibrosaAnalyzer analyzer =
-                new LibrosaAnalyzer();
-
-        synchronized (remoteAnalyzerLock) {
-            activeRemoteAnalyzer = analyzer;
-        }
-
-        analyzer.analyzeChords(
-                audioPath,
-                sampleRate,
-                new AnalysisCallback() {
-                    @Override
-                    public void onComplete(
-                            List<ChordTimestamp> results,
-                            int keyIndex
-                    ) {
-                        if (!clearIfActive(analyzer)) {
-                            return;
-                        }
-
-                        callback.onComplete(
-                                results,
-                                keyIndex
-                        );
-                    }
-
-                    @Override
-                    public void onError(Exception e) {
-                        if (!clearIfActive(analyzer)) {
-                            return;
-                        }
-
-                        callback.onError(e);
-                    }
-                }
-        );
     }
 
     public void cancelActiveAnalysis() {
-        LibrosaAnalyzer analyzer;
+        ChordAnalyzerStrategy analyzerToCancel;
 
-        synchronized (remoteAnalyzerLock) {
-            analyzer = activeRemoteAnalyzer;
-            activeRemoteAnalyzer = null;
+        synchronized (analyzerLock) {
+            analyzerToCancel = activeAnalyzer;
+            activeAnalyzer = null;
         }
 
-        if (analyzer != null) {
-            analyzer.cancel();
+        if (analyzerToCancel != null) {
+            analyzerToCancel.cancel();
         }
     }
 
     private boolean clearIfActive(
-            LibrosaAnalyzer analyzer
+            ChordAnalyzerStrategy analyzer
     ) {
-        synchronized (remoteAnalyzerLock) {
-            if (activeRemoteAnalyzer != analyzer) {
+        synchronized (analyzerLock) {
+            if (activeAnalyzer != analyzer) {
                 return false;
             }
 
-            activeRemoteAnalyzer = null;
+            activeAnalyzer = null;
             return true;
         }
     }

@@ -1,0 +1,149 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function ownsUserData(userId) {
+      return isSignedIn()
+        && request.auth.uid == userId;
+    }
+
+    function isValidHistoryId(historyId) {
+      return historyId is string
+        && historyId.size() >= 1
+        && historyId.size() <= 128
+        && historyId.matches('^[A-Za-z0-9_-]+$');
+    }
+
+    function hasValidOptionalAudioFileName(data) {
+      return !('audioFileName' in data)
+        || data.audioFileName == null
+        || (
+          data.audioFileName is string
+          && data.audioFileName.size() <= 255
+        );
+    }
+
+    function isValidCurrentHistory(historyId) {
+      let data = request.resource.data;
+
+      return data.keys().hasAll([
+          'historyId',
+          'title',
+          'chords',
+          'keyIndex',
+          'timestamp'
+        ])
+        && data.keys().hasOnly([
+          'historyId',
+          'title',
+          'audioFileName',
+          'chords',
+          'keyIndex',
+          'timestamp'
+        ])
+        && isValidHistoryId(historyId)
+        && data.historyId is string
+        && data.historyId == historyId
+        && data.title is string
+        && data.title.size() >= 1
+        && data.title.size() <= 200
+        && hasValidOptionalAudioFileName(data)
+        && data.chords is list
+        && data.chords.size() <= 5000
+        && data.keyIndex is int
+        && data.keyIndex >= -1
+        && data.keyIndex <= 23
+        && data.timestamp is timestamp;
+    }
+
+    function isValidLegacyMigration(historyId) {
+      let oldData = resource.data;
+      let newData = request.resource.data;
+      let changedFields = newData.diff(oldData).affectedKeys();
+
+      return isValidHistoryId(historyId)
+        && oldData.keys().hasAny([
+          'filePath',
+          'result'
+        ])
+        && changedFields.hasOnly([
+          'audioFileName',
+          'chords',
+          'keyIndex',
+          'filePath',
+          'result'
+        ])
+        && newData.keys().hasOnly([
+          'historyId',
+          'title',
+          'audioFileName',
+          'chords',
+          'keyIndex',
+          'timestamp',
+          'filePath',
+          'result'
+        ])
+        && (!('historyId' in newData)
+          || (
+            newData.historyId is string
+            && newData.historyId == historyId
+          ))
+        && ('title' in newData)
+        && newData.title is string
+        && newData.title.size() >= 1
+        && newData.title.size() <= 200
+        && hasValidOptionalAudioFileName(newData)
+        && (!('chords' in newData)
+          || (
+            newData.chords is list
+            && newData.chords.size() <= 5000
+          ))
+        && (!('keyIndex' in newData)
+          || (
+            newData.keyIndex is int
+            && newData.keyIndex >= -1
+            && newData.keyIndex <= 23
+          ))
+        && (!('timestamp' in newData)
+          || newData.timestamp is timestamp)
+        && (!('filePath' in newData)
+          || (
+            newData.filePath is string
+            && newData.filePath.size() <= 1024
+          ))
+        && (!('result' in newData)
+          || (
+            newData.result is string
+            && newData.result.size() <= 500000
+          ));
+    }
+
+    match /users/{userId} {
+      allow read, write: if false;
+
+      match /history/{historyId} {
+        allow get, list: if ownsUserData(userId);
+
+        allow create: if ownsUserData(userId)
+          && isValidCurrentHistory(historyId);
+
+        allow update: if ownsUserData(userId)
+          && (
+            isValidCurrentHistory(historyId)
+            || isValidLegacyMigration(historyId)
+          );
+
+        allow delete: if ownsUserData(userId);
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

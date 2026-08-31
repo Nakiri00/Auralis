@@ -185,9 +185,6 @@ public class HomeFragment extends Fragment {
         setupClickListeners();
         setupObservers();
 
-        if (getArguments() != null) {
-            loadHistoryData(getArguments());
-        }
     }
 
     private void setupClickListeners() {
@@ -481,39 +478,25 @@ public class HomeFragment extends Fragment {
 
     // Dipanggil dari MainActivity saat user memilih item di HistoryFragment
     public void loadHistoryData(
-            Bundle bundle
+            @NonNull ChordHistory history,
+            @Nullable String audioPath
     ) {
-        if (
-                bundle == null
-                        || viewModel == null
-        ) {
+        if (viewModel == null) {
             return;
         }
 
-        String historyId =
-                bundle.getString("historyId");
-
-        String audioPath =
-                bundle.getString("audioPath");
-
-        String title =
-                bundle.getString("songTitle");
-
-        String savedChordData =
-                bundle.getString("chordData");
-
         boolean hasLocalAudio =
                 audioPath != null
-                        && new File(audioPath)
-                        .isFile();
+                        && new File(audioPath).isFile();
 
         viewModel.loadHistoryData(
-                historyId,
+                history.getHistoryId(),
                 hasLocalAudio
                         ? audioPath
                         : null,
-                title,
-                savedChordData
+                history.getTitle(),
+                history.getChords(),
+                history.getKeyIndex()
         );
 
         buttonDetectPitch.setVisibility(

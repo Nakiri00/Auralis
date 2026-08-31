@@ -18,6 +18,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import be.tarsos.dsp.AudioDispatcher;
 import be.tarsos.dsp.AudioEvent;
@@ -39,6 +41,12 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
             this.sampleRate = sampleRate;
         }
     }
+    private final AtomicBoolean started = new AtomicBoolean(false);
+    private final AtomicBoolean cancelled = new AtomicBoolean(false);
+    private final AtomicBoolean callbackDelivered = new AtomicBoolean(false);
+
+    private volatile Thread workerThread;
+    private volatile AudioDispatcher activeDispatcher;
 
     @Override
     public void analyzeChords(
@@ -46,10 +54,20 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
             int inputSampleRate,
             AudioAnalysisRepository.AnalysisCallback callback
     ) {
-        new Thread(() -> {
+        if (!started.compareAndSet(false, true)) {
+            callback.onError(
+                    new IllegalStateException(
+                            "TarsosDSPAnalyzer instances are single-use"
+                    )
+            );
+            return;
+        }
+        Thread worker = new Thread(() -> {
             DecodedPcmFile decoded = null;
 
             try {
+                throwIfCancellationRequested();
+
                 File audioFile = new File(audioPath);
 
                 if (!audioFile.exists()) {
@@ -59,6 +77,8 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
                 }
 
                 decoded = decodeAudioToMonoPcmFile(audioPath);
+
+                throwIfCancellationRequested();
 
                 if (decoded == null || !decoded.file.exists()) {
                     throw new IOException("Failed to decode audio");
@@ -92,7 +112,8 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
                                     bufferSize,
                                     bufferOverlap
                             );
-
+                    activeDispatcher = dispatcher;
+                    throwIfCancellationRequested();
                     final FFT fft = new FFT(bufferSize);
                     final float[] spectrum =
                             new float[bufferSize / 2];
@@ -142,6 +163,9 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
                                 public boolean process(
                                         AudioEvent audioEvent
                                 ) {
+                                    if (isCancellationRequested()) {
+                                        return false;
+                                    }
                                     float[] audioBuffer =
                                             audioEvent.getFloatBuffer();
 
@@ -172,7 +196,7 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
                                                 detectedChords
                                         );
 
-                                        return true;
+                                        return !isCancellationRequested();
                                     }
 
                                     /*
@@ -357,7 +381,7 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
                                                 detectedChords
                                         );
 
-                                        return true;
+                                        return !isCancellationRequested();
                                     }
 
                                     for (int i = 0; i < 12; i++) {
@@ -408,7 +432,7 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
                                                 detectedChords
                                         );
 
-                                        return true;
+                                        return !isCancellationRequested();
                                     }
 
                                     int noisyNotes = 0;
@@ -430,7 +454,7 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
                                                 detectedChords
                                         );
 
-                                        return true;
+                                        return !isCancellationRequested();
                                     }
 
                                     /*
@@ -475,11 +499,14 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
                                             detectedChords
                                     );
 
-                                    return true;
+                                    return !isCancellationRequested();
                                 }
 
                                 @Override
                                 public void processingFinished() {
+                                    if (isCancellationRequested()) {
+                                        return;
+                                    }
                                     float maximumGlobalChroma = 0;
 
                                     for (float value : globalChroma) {
@@ -531,11 +558,16 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
                                             smoothTransitions(
                                                     chordsForSmoothing
                                             );
+                                    if (isCancellationRequested()) {
+                                        return;
+                                    }
 
-                                    callback.onComplete(
+                                    deliverComplete(
+                                            callback,
                                             finalChords,
                                             keyIndex
                                     );
+
                                 }
                             };
 
@@ -543,23 +575,104 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
                     dispatcher.run();
                 }
 
-            } catch (Exception e) {
-                Log.e(TAG, "Chord analysis failed", e);
-                callback.onError(e);
-
+            } catch (CancellationException exception) {
+                Log.d(TAG, "TarsosDSP chord analysis cancelled");
+            } catch (Exception exception) {
+                if (!isCancellationRequested()) {
+                    Log.e(TAG, "Chord analysis failed", exception);
+                    deliverError(callback, exception);
+                }
             } finally {
+                activeDispatcher = null;
+
                 if (decoded != null
+                        && decoded.file != null
                         && decoded.file.exists()
                         && !decoded.file.delete()) {
-
                     Log.w(
                             TAG,
-                            "Failed to delete temporary PCM file: "
-                                    + decoded.file.getAbsolutePath()
+                            "Unable to delete decoded PCM file: "
+                                    + decoded.file
                     );
                 }
+
+                workerThread = null;
             }
-        }, "auralis-chord-analysis").start();
+        }, "auralis-chord-analysis");
+        workerThread = worker;
+        if (cancelled.get()) {
+            workerThread = null;
+            return;
+        }
+
+        worker.start();
+    }
+
+    @Override
+    public void cancel() {
+        if (!cancelled.compareAndSet(false, true)) {
+            return;
+        }
+
+        AudioDispatcher dispatcher = activeDispatcher;
+
+        if (dispatcher != null) {
+            try {
+                dispatcher.stop();
+            } catch (RuntimeException exception) {
+                Log.w(
+                        TAG,
+                        "Unable to stop AudioDispatcher",
+                        exception
+                );
+            }
+        }
+
+        Thread worker = workerThread;
+
+        if (worker != null) {
+            worker.interrupt();
+        }
+    }
+
+    private boolean isCancellationRequested() {
+        return cancelled.get()
+                || Thread.currentThread().isInterrupted();
+    }
+
+    private void throwIfCancellationRequested() {
+        if (isCancellationRequested()) {
+            throw new CancellationException(
+                    "TarsosDSP chord analysis was cancelled"
+            );
+        }
+    }
+
+    private void deliverComplete(
+            AudioAnalysisRepository.AnalysisCallback callback,
+            List<ChordTimestamp> chordData,
+            int keyIndex
+    ) {
+        if (isCancellationRequested()) {
+            return;
+        }
+
+        if (callbackDelivered.compareAndSet(false, true)) {
+            callback.onComplete(chordData, keyIndex);
+        }
+    }
+
+    private void deliverError(
+            AudioAnalysisRepository.AnalysisCallback callback,
+            Exception exception
+    ) {
+        if (isCancellationRequested()) {
+            return;
+        }
+
+        if (callbackDelivered.compareAndSet(false, true)) {
+            callback.onError(exception);
+        }
     }
 
     private void logChordFrequencies(
@@ -957,6 +1070,7 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
                          new FileOutputStream(pcmFile)) {
 
                 while (!outputDone) {
+                    throwIfCancellationRequested();
                     if (!inputDone) {
                         int inputIndex =
                                 codec.dequeueInputBuffer(
@@ -1009,11 +1123,15 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
                         }
                     }
 
+                    throwIfCancellationRequested();
+
                     int outputIndex =
                             codec.dequeueOutputBuffer(
                                     bufferInfo,
                                     timeoutMicroseconds
                             );
+
+                    throwIfCancellationRequested();
 
                     if (outputIndex >= 0) {
                         try {
@@ -1108,9 +1226,7 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
                     outputSampleRate
             );
 
-        } catch (Exception e) {
-            Log.e(TAG, "Audio decoding failed", e);
-
+        } catch (Exception exception) {
             if (pcmFile != null
                     && pcmFile.exists()
                     && !pcmFile.delete()) {
@@ -1122,6 +1238,11 @@ public class TarsosDSPAnalyzer implements ChordAnalyzerStrategy {
                 );
             }
 
+            if (exception instanceof CancellationException) {
+                throw (CancellationException) exception;
+            }
+
+            Log.e(TAG, "Audio decoding failed", exception);
             return null;
 
         } finally {
